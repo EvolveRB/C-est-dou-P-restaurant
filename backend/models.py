@@ -7,7 +7,7 @@ class Mesa(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     numero = Column(Integer, unique=True, index=True)
-    estado = Column(String(50), default="libre") # Puede ser "libre" u "ocupada"
+    estado = Column(String(50), default="libre")  # "libre" u "ocupada"
 
 # Tabla de Productos (El Menú)
 class Producto(Base):
@@ -15,6 +15,5 @@ class Producto(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     nombre = Column(String(100), index=True)
-    precio = Column(Integer) # Usamos Integer porque en CLP no usamos decimales
+    precio = Column(Integer)  # En CLP sin decimales
     disponible = Column(Boolean, default=True)
-    

@@ -1,29 +1,29 @@
 from fastapi import FastAPI, Depends
-from database import SessionLocal, engine
-from models import Base, Producto, Mesa
-from sqlalchemy.orm import Session
+import libsql_client
+from database import get_db
 
-# Opcional: Esto crea las tablas en la BD si no existen
-Base.metadata.create_all(bind=engine)
+app = FastAPI(title="API Restaurante - C'est doux P")
 
-app = FastAPI(title="API Restaurante")
+@app.get("/test-db")
+async def test_db(db: libsql_client.Client = Depends(get_db)):
+    # Contamos sobre la tabla en singular 'mesa'
+    result = await db.execute("SELECT COUNT(*) FROM mesa")
+    return {
+        "conexion": "exitosa con Turso",
+        "total_mesas": result.rows[0][0]
+    }
 
-# Dependencia para obtener la sesión de base de datos en cada petición
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
-
-# Ruta para ver todas las mesas
 @app.get("/mesas")
-def obtener_mesas(db: Session = Depends(get_db)):
-    mesas = db.query(Mesa).all()
+async def obtener_mesas(db: libsql_client.Client = Depends(get_db)):
+    result = await db.execute("SELECT * FROM mesa")
+    
+    # Mapeo dinámico usando los nombres de las columnas que vienen de Turso
+    columnas = result.columns
+    mesas = [dict(zip(columnas, row)) for row in result.rows]
     return mesas
 
-# Ruta para ver todos los productos
 @app.get("/productos")
-def obtener_productos(db: Session = Depends(get_db)):
-    productos = db.query(Producto).all()
-    return productos
+async def obtener_productos(db: libsql_client.Client = Depends(get_db)):
+    result = await db.execute("SELECT * FROM producto")
+    columnas = result.columns
+    return [dict(zip(columnas, row)) for row in result.rows]
