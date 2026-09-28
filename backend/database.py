@@ -1,15 +1,18 @@
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy.ext.declarative import declarative_base
+import os
+from dotenv import load_dotenv
+import libsql_client
 
-# URL de conexión: usuario root, sin contraseña, puerto 3306, base de datos restaurante_db
-SQLALCHEMY_DATABASE_URL = "mysql+pymysql://root:@localhost:3306/restaurante"
+load_dotenv()
 
-# Creamos el motor de conexión
-engine = create_engine(SQLALCHEMY_DATABASE_URL)
+TURSO_DATABASE_URL = os.getenv("TURSO_DATABASE_URL")
+TURSO_AUTH_TOKEN = os.getenv("TURSO_AUTH_TOKEN")
 
-# Configuramos la fábrica de sesiones para ejecutar consultas
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-
-# Clase base de la que heredarán todos nuestros modelos (tablas)
-Base = declarative_base()
+async def get_db():
+    client = libsql_client.create_client(
+        url=TURSO_DATABASE_URL,
+        auth_token=TURSO_AUTH_TOKEN
+    )
+    try:
+        yield client
+    finally:
+        await client.close()
