@@ -1,6 +1,6 @@
-====================================================================
+
 SISTEMA DE RESTAURANTE (C'est doux P) - README COMPLETO
-====================================================================
+
 
 Este proyecto es un sistema de gestion integral para un restaurante, compuesto por un backend desarrollado en Python con FastAPI y un frontend desarrollado con Vite.
 
