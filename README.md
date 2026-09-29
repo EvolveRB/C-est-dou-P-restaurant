@@ -4,6 +4,8 @@ Este proyecto es un sistema de gestión para un restaurante, compuesto por un **
 
 La base de datos fue migrada de un servidor MySQL local a **Turso (SQLite distribuido en la nube)**, consumida a través de la librería oficial asíncrona `libsql-client`.
 
+Enlace al swagger: https://embark-magnetism-mosaic.ngrok-free.dev/docs
+
 ---
 
 ## Arquitectura del Proyecto
