@@ -39,7 +39,7 @@ El sistema cumple rigurosamente con los requerimientos académicos evaluados en 
 
 * **SELECT 1 (Filtro simple):** `GET /productos/filtrados`
   * *SQL:* `SELECT id_plato, nombre, precio FROM producto WHERE precio < ?;`
-  * *Álgebra Relacional:* $\pi_{id\_plato, name, precio} (\sigma_{precio < 10000} (producto))$
+  * *Álgebra Relacional:* $\pi_{id\_plato, nombre, precio} (\sigma_{precio < 10000} (producto))$
 * **SELECT 2 (JOIN de 3 tablas):** `GET /pedidos/info-mesas`
   * *SQL:* Relaciona `pedido`, `visita_mesa` y `mesa` para obtener el número de mesa de cada comanda.
   * *Álgebra Relacional:* $\pi_{id\_pedido, num\_mesa, estado\_pedido, hora\_pedido} ((pedido \bowtie_{id\_visita} visita\_mesa) \bowtie_{num\_mesa} mesa)$
@@ -59,6 +59,12 @@ El sistema cumple rigurosamente con los requerimientos académicos evaluados en 
 - `POST /admin/alter-1` / `DELETE /admin/alter-1/revertir`: Añade o elimina dinámicamente la columna `telefono` en la tabla `empleado`.
 - `POST /admin/alter-2` / `DELETE /admin/alter-2/revertir`: Añade o elimina la columna `fecha_entrega` en la tabla `pedido`.
 - `POST /admin/preparar-temporada` & `DELETE /admin/drop/promociones`: Demuestra la creación y eliminación en caliente (`DROP TABLE`) de una tabla temporal de promociones.
+
+---
+
+## Nota Teórica sobre el Álgebra Relacional
+
+El Álgebra Relacional es un lenguaje formal diseñado exclusivamente para la recuperación y consulta de datos (`SELECT`), basado en la teoría matemática de conjuntos. Por esta razón, las operaciones de modificación de datos (`INSERT`, `UPDATE`, `DELETE`) y modificación de esquemas (`ALTER`, `DROP`) no forman parte del álgebra relacional pura, ya que corresponden al Lenguaje de Manipulación de Datos (DML) y Definición de Datos (DDL) estándar de SQL, los cuales se encuentran completamente implementados y documentados en los endpoints de administración y gestión de esta API.
 
 ---
 
