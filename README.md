@@ -84,10 +84,11 @@ La base de datos se encuentra alojada en **Turso**. El esquema incluye las tabla
    python -m venv venv
    .\venv\Scripts\Activate.ps1
 
-
-4. Instala las dependencias del backend
+3. Instala las dependencias del backend
    ```bash
    pip install -r requirements.txt
+4. Verifica que la bd este bien conectada a partir del archivo .env dentro de la carpeta backend/
+
 5. Inicia el servidor de desarrollo:
    ```bash
    uvicorn main:app --reload
