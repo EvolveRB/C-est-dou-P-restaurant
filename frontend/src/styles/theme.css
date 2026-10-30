@@ -1,0 +1,93 @@
+:root {
+  /* Brand colors (Client Catalog Palette - French Bistro warm tones) */
+  --c-burgundy-900: #4A1217;
+  --c-burgundy-800: #5C1D24;
+  --c-burgundy-700: #6E262E;
+  --c-burgundy-600: #85333C;
+  --c-terracotta: #B85D43;
+  --c-terracotta-hover: #A44F37;
+  --c-terracotta-light: #FCEFEA;
+  
+  --c-cream-bg: #FCF8F5;
+  --c-cream-card: #FFFFFF;
+  --c-cream-placeholder: #F5DDD4;
+  --c-cream-border: #EEDCD4;
+  --c-cream-border-subtle: #F6ECE7;
+  
+  --c-text-main: #3D1A1E;
+  --c-text-muted: #8E5F64;
+  --c-text-subtle: #AA8287;
+  
+  /* Employee Palette (Clean slate, warm ivory modal & clean white backdrop) */
+  --emp-bg: #FFFFFF;
+  --emp-card-bg: #FDF9F5;
+  --emp-inner-card: #F7F1EB;
+  --emp-border: #E6DAD0;
+  --emp-input-bg: #FFFFFF;
+  --emp-title: #14171F;
+  --emp-subtitle: #6B7280;
+  --emp-btn: #5C1D24;
+  --emp-btn-hover: #4A1217;
+  --emp-accent: #B85D43;
+
+  /* Typography */
+  --font-sans: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-serif: 'Playfair Display', Georgia, serif;
+  
+  /* Radii */
+  --radius-sm: 8px;
+  --radius-md: 14px;
+  --radius-lg: 18px;
+  --radius-xl: 24px;
+  --radius-pill: 9999px;
+  
+  /* Shadows */
+  --shadow-sm: 0 1px 3px rgba(92, 29, 36, 0.05);
+  --shadow-md: 0 4px 14px rgba(92, 29, 36, 0.07);
+  --shadow-lg: 0 12px 30px rgba(92, 29, 36, 0.1);
+  --shadow-modal: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  -webkit-tap-highlight-color: transparent;
+}
+
+body {
+  font-family: var(--font-sans);
+  color: var(--c-text-main);
+  background-color: var(--emp-bg);
+  min-height: 100vh;
+  line-height: 1.45;
+  overflow-x: hidden;
+}
+
+button {
+  font-family: inherit;
+  cursor: pointer;
+  border: none;
+  background: none;
+}
+
+input, select, textarea {
+  font-family: inherit;
+  font-size: 1rem;
+}
+
+/* Custom subtle scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(184, 93, 67, 0.25);
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(184, 93, 67, 0.45);
+}

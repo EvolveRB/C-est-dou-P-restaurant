@@ -1,0 +1,266 @@
+/* ========================================================
+   EMPLOYEE / STAFF INTERFACE STYLES (EXCLUSIVAMENTE PARA PC)
+   ======================================================== */
+
+.employee-portal-root {
+  min-height: 100vh;
+  background-color: var(--emp-bg);
+  color: #1E293B;
+  display: flex;
+  flex-direction: column;
+  font-family: var(--font-sans);
+}
+
+/* Centered Login Viewport Wrapper */
+.employee-login-viewport {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 32px;
+  background: 
+    radial-gradient(ellipse at 50% 25%, rgba(184, 93, 67, 0.06) 0%, transparent 65%),
+    radial-gradient(ellipse at 80% 80%, rgba(92, 29, 36, 0.06) 0%, transparent 50%),
+    #FFFFFF;
+}
+
+/* PC Centered Login Card */
+.employee-login-pc-card {
+  width: 100%;
+  max-width: 460px;
+  background: #FFFFFF;
+  border-radius: 28px;
+  border: 1px solid #E2E8F0;
+  box-shadow: 
+    0 20px 50px -10px rgba(0, 0, 0, 0.07),
+    0 0 0 1px rgba(0, 0, 0, 0.03);
+  padding: 44px 38px 40px;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  animation: fadeIn 0.25s ease;
+}
+
+/* Título arriba centrado */
+.login-title-centered {
+  font-size: 32px;
+  font-weight: 800;
+  color: var(--emp-title);
+  text-align: center;
+  letter-spacing: -0.6px;
+  margin-bottom: 24px;
+}
+
+/* Contenedor del formulario centrado debajo del título */
+.login-card-container {
+  background: var(--emp-inner-card);
+  border: 1px solid var(--emp-border);
+  border-radius: 20px;
+  padding: 28px 24px;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.03);
+}
+
+.login-form-group {
+  display: flex;
+  flex-direction: column;
+  margin-bottom: 18px;
+}
+
+.login-label {
+  font-size: 14px;
+  font-weight: 600;
+  color: #2E333D;
+  margin-bottom: 8px;
+}
+
+.login-input-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.login-input {
+  width: 100%;
+  background: var(--emp-input-bg);
+  border: 1.5px solid #E2D7CC;
+  border-radius: 12px;
+  padding: 13px 16px;
+  font-size: 15px;
+  color: #1F242E;
+  transition: all 0.2s ease;
+  outline: none;
+}
+
+.login-input:focus {
+  border-color: #23272F;
+  box-shadow: 0 0 0 3px rgba(35, 39, 47, 0.08);
+}
+
+.login-action-caption {
+  font-size: 12.5px;
+  font-weight: 500;
+  color: #6B7280;
+  margin-bottom: 6px;
+}
+
+.login-submit-btn {
+  width: 100%;
+  background: var(--emp-btn);
+  color: #FFFFFF;
+  border-radius: 12px;
+  padding: 14px 20px;
+  font-size: 15px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  transition: all 0.2s ease;
+  box-shadow: 0 4px 12px rgba(92, 29, 36, 0.2);
+  border: none;
+  cursor: pointer;
+}
+
+.login-submit-btn:hover {
+  background: var(--emp-btn-hover);
+  transform: translateY(-1px);
+}
+
+.login-submit-btn:active {
+  transform: translateY(0);
+}
+
+/* Authenticated PC Workspace Layout */
+.staff-layout-container {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: #FFFFFF;
+}
+
+.staff-navbar {
+  background: #FFFFFF;
+  border-bottom: 1px solid #E2E8F0;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.03);
+  padding: 14px 36px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.staff-brand-section {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.staff-logo-badge {
+  background: linear-gradient(135deg, var(--c-burgundy-800), var(--c-terracotta));
+  color: white;
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 800;
+  font-size: 16px;
+}
+
+.staff-brand-text {
+  display: flex;
+  flex-direction: column;
+}
+
+.staff-brand-name {
+  font-size: 18px;
+  font-weight: 800;
+  color: #0F172A;
+  letter-spacing: -0.3px;
+}
+
+.staff-portal-tag {
+  font-size: 11px;
+  color: #64748B;
+  font-weight: 500;
+}
+
+.staff-nav-links {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.staff-nav-item {
+  color: #64748B;
+  padding: 9px 18px;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 600;
+  text-decoration: none;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  transition: all 0.15s ease;
+}
+
+.staff-nav-item:hover,
+.staff-nav-item.active {
+  color: #0F172A;
+  background: #F1F5F9;
+}
+
+.staff-user-actions {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.staff-user-pill {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #F8FAFC;
+  border: 1px solid #E2E8F0;
+  color: #1E293B;
+  padding: 7px 16px;
+  border-radius: var(--radius-pill);
+  font-size: 13.5px;
+}
+
+.staff-user-role {
+  color: var(--c-terracotta);
+  font-weight: 700;
+}
+
+.staff-logout-btn {
+  background: #FEF2F2;
+  color: #DC2626;
+  border: 1px solid #FEE2E2;
+  padding: 8px 16px;
+  border-radius: 10px;
+  font-size: 13.5px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.15s ease;
+  cursor: pointer;
+}
+
+.staff-logout-btn:hover {
+  background: #FEE2E2;
+  border-color: #FCA5A5;
+}
+
+/* Staff Workspace Content Area (PC desktop) */
+.staff-content-area {
+  flex: 1;
+  padding: 32px 36px;
+  max-width: 1440px;
+  width: 100%;
+  margin: 0 auto;
+  background: #FFFFFF;
+}
