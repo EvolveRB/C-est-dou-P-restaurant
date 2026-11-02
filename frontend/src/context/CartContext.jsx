@@ -1,15 +1,27 @@
 import { createContext, useContext, useState, useEffect } from 'react';
 import { useRestaurant } from './RestaurantContext';
 
+// ──────────────────────────────────────────────────────────────────────────────
+// El carrito mantiene su persistencia temporal en localStorage mientras el
+// cliente arma el pedido. La función sendOrder delega al backend a través de
+// submitOrderForTable (RestaurantContext), que ahora es async.
+// ──────────────────────────────────────────────────────────────────────────────
+
 const CartContext = createContext(null);
 
 export function CartProvider({ children }) {
   const { tables, submitOrderForTable } = useRestaurant();
 
+  // ──────────────────────────────────────────────────────────────────────────
+  // Estado: número de mesa activa (leído del QR)
+  // ──────────────────────────────────────────────────────────────────────────
   const [tableNumber, setTableNumber] = useState(() => {
     return localStorage.getItem('cest_doux_mesa_activa') || '1';
   });
 
+  // ──────────────────────────────────────────────────────────────────────────
+  // Estado: items del carrito (persistencia temporal en localStorage)
+  // ──────────────────────────────────────────────────────────────────────────
   const [cart, setCart] = useState(() => {
     try {
       const saved = localStorage.getItem('carrito_cest_dou_p');
@@ -19,9 +31,15 @@ export function CartProvider({ children }) {
     }
   });
 
+  // Estado del toast de notificación
   const [toastMessage, setToastMessage] = useState(null);
 
-  // Persistir en localStorage tanto a nivel general como por mesa
+  // Estado de carga del envío (evita doble-clic mientras el backend responde)
+  const [sendingOrder, setSendingOrder] = useState(false);
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // Persistencia temporal del carrito en localStorage (por mesa)
+  // ──────────────────────────────────────────────────────────────────────────
   useEffect(() => {
     localStorage.setItem('carrito_cest_dou_p', JSON.stringify(cart));
     if (tableNumber) {
@@ -29,7 +47,10 @@ export function CartProvider({ children }) {
     }
   }, [cart, tableNumber]);
 
-  // Escuchar cuando el cliente vuelve a entrar al navegador o desbloquea el teléfono
+  // ──────────────────────────────────────────────────────────────────────────
+  // Sincronización del carrito cuando el usuario vuelve a la pestaña /
+  // desbloquea el teléfono
+  // ──────────────────────────────────────────────────────────────────────────
   useEffect(() => {
     const syncFromStorage = () => {
       try {
@@ -47,20 +68,17 @@ export function CartProvider({ children }) {
       if (e.key === 'carrito_cest_dou_p' && e.newValue) {
         try {
           const parsed = JSON.parse(e.newValue);
-          if (Array.isArray(parsed)) {
-            setCart(parsed);
-          }
+          if (Array.isArray(parsed)) setCart(parsed);
         } catch {}
       }
     };
 
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') syncFromStorage();
+    };
+
     window.addEventListener('pageshow', syncFromStorage);
     window.addEventListener('storage', handleStorageChange);
-    const handleVisibility = () => {
-      if (document.visibilityState === 'visible') {
-        syncFromStorage();
-      }
-    };
     document.addEventListener('visibilitychange', handleVisibility);
 
     return () => {
@@ -70,6 +88,9 @@ export function CartProvider({ children }) {
     };
   }, []);
 
+  // ──────────────────────────────────────────────────────────────────────────
+  // Helpers UI
+  // ──────────────────────────────────────────────────────────────────────────
   const showToast = (msg) => {
     setToastMessage(msg);
     setTimeout(() => {
@@ -77,27 +98,29 @@ export function CartProvider({ children }) {
     }, 2400);
   };
 
-  // Al escanear un QR (/mesa/:num), actualiza la mesa y toma el carrito de localStorage
+  // ──────────────────────────────────────────────────────────────────────────
+  // updateTable — se llama al escanear el QR (/mesa/:num)
+  // ──────────────────────────────────────────────────────────────────────────
   const updateTable = (num) => {
-    if (num) {
-      const strNum = String(num);
-      setTableNumber(strNum);
-      localStorage.setItem('cest_doux_mesa_activa', strNum);
+    if (!num) return;
+    const strNum = String(num);
+    setTableNumber(strNum);
+    localStorage.setItem('cest_doux_mesa_activa', strNum);
 
-      try {
-        const tableCart = localStorage.getItem(`carrito_cest_dou_p_mesa_${strNum}`);
-        const generalCart = localStorage.getItem('carrito_cest_dou_p');
-        const cartToRestore = tableCart || generalCart;
-        if (cartToRestore) {
-          const parsed = JSON.parse(cartToRestore);
-          if (Array.isArray(parsed) && parsed.length > 0) {
-            setCart(parsed);
-          }
-        }
-      } catch {}
-    }
+    try {
+      const tableCart = localStorage.getItem(`carrito_cest_dou_p_mesa_${strNum}`);
+      const generalCart = localStorage.getItem('carrito_cest_dou_p');
+      const cartToRestore = tableCart || generalCart;
+      if (cartToRestore) {
+        const parsed = JSON.parse(cartToRestore);
+        if (Array.isArray(parsed) && parsed.length > 0) setCart(parsed);
+      }
+    } catch {}
   };
 
+  // ──────────────────────────────────────────────────────────────────────────
+  // Operaciones del carrito
+  // ──────────────────────────────────────────────────────────────────────────
   const addToCart = (product, qty = 1, note = '') => {
     setCart((prev) => {
       const index = prev.findIndex((item) => item.product.id === product.id);
@@ -116,8 +139,8 @@ export function CartProvider({ children }) {
   };
 
   const updateQuantity = (productId, delta) => {
-    setCart((prev) => {
-      return prev
+    setCart((prev) =>
+      prev
         .map((item) => {
           if (item.product.id === productId) {
             const newQty = item.quantity + delta;
@@ -125,29 +148,59 @@ export function CartProvider({ children }) {
           }
           return item;
         })
-        .filter(Boolean);
-    });
+        .filter(Boolean)
+    );
   };
 
   const removeFromCart = (productId) => {
     setCart((prev) => prev.filter((item) => item.product.id !== productId));
   };
 
-  const clearCart = () => {
-    setCart([]);
-  };
+  const clearCart = () => setCart([]);
 
-  // Enviar pedido que conecta directamente con la cocina
-  // El progreso (carrito) se conserva en localStorage hasta el proceso de pago
-  const sendOrder = (customNotes = '') => {
+  // ──────────────────────────────────────────────────────────────────────────
+  // sendOrder — envía el pedido al backend a través de submitOrderForTable
+  //
+  // Cambios respecto a la versión anterior:
+  //  • Es ahora async/await ya que submitOrderForTable hace un fetch real
+  //  • El toast de éxito solo se muestra si el backend responde con 2xx
+  //  • Los errores de red o 4xx/5xx muestran un toast de error y no borran el carrito
+  //  • sendingOrder previene envíos duplicados
+  // ──────────────────────────────────────────────────────────────────────────
+  /**
+   * Envía el carrito actual como pedido al backend.
+   *
+   * @param {string} customNotes - Notas adicionales del cliente
+   * @returns {Promise<Object|null>} - El pedido creado, o null si el carrito está vacío o hay error
+   */
+  const sendOrder = async (customNotes = '') => {
     if (cart.length === 0) return null;
-    const newOrder = submitOrderForTable(tableNumber, cart, customNotes);
-    // IMPORTANTE: No vaciar el carrito en localStorage, se preserva hasta finalizar el pago
-    showToast('Pedido enviado a cocina con éxito');
-    return newOrder;
+    if (sendingOrder) return null; // Evita doble-clic
+
+    setSendingOrder(true);
+    try {
+      // submitOrderForTable es async y lanza un Error si el backend falla (4xx/5xx)
+      const newOrder = await submitOrderForTable(tableNumber, cart, customNotes);
+
+      // Solo llega aquí si el backend respondió con 2xx
+      showToast('✅ Pedido enviado a cocina con éxito');
+      console.info('[CartContext] Pedido confirmado por backend:', newOrder);
+
+      // IMPORTANTE: No vaciamos el carrito en localStorage;
+      // se preserva hasta que se finalice el pago
+      return newOrder;
+    } catch (err) {
+      console.error('[CartContext] sendOrder falló:', err);
+      showToast('❌ Error al enviar el pedido. Intenta de nuevo.');
+      return null;
+    } finally {
+      setSendingOrder(false);
+    }
   };
 
-  // Obtener la comanda en vivo de la mesa actual para el cliente
+  // ──────────────────────────────────────────────────────────────────────────
+  // Datos derivados
+  // ──────────────────────────────────────────────────────────────────────────
   const currentTableState = tables.find((t) => t.id === parseInt(tableNumber, 10));
   const activeOrder = currentTableState?.pedido
     ? {
@@ -160,6 +213,9 @@ export function CartProvider({ children }) {
   const totalItems = cart.reduce((sum, item) => sum + item.quantity, 0);
   const totalPrice = cart.reduce((sum, item) => sum + item.product.precio * item.quantity, 0);
 
+  // ──────────────────────────────────────────────────────────────────────────
+  // Context value — misma firma que la versión anterior para no romper la UI
+  // ──────────────────────────────────────────────────────────────────────────
   return (
     <CartContext.Provider
       value={{
@@ -175,7 +231,9 @@ export function CartProvider({ children }) {
         totalItems,
         totalPrice,
         toastMessage,
-        showToast
+        showToast,
+        // Extra: útil para deshabilitar el botón "Enviar pedido" mientras carga
+        sendingOrder
       }}
     >
       {children}

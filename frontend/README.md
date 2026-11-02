@@ -1,16 +1,53 @@
-# React + Vite
+# Frontend — C'est doux P (React 19 + Vite)
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Aplicación cliente y panel de administración para el sistema de restaurante **C'est doux P**, construida con **React 19**, **Vite** y **React Router**.
 
-Currently, two official plugins are available:
+---
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+## 🚀 Conexión con el Backend
 
-## React Compiler
+El frontend se conecta asíncronamente a la API de **FastAPI** mediante `fetch` nativo centralizado a través de la variable de entorno `VITE_API_URL`.
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+### Variables de Entorno (`frontend/.env`)
+```env
+VITE_API_URL=http://localhost:8000
+```
 
-## Expanding the ESLint configuration
+---
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+## 🧠 Arquitectura de Contextos (`src/context/`)
+
+Se eliminó toda simulación de `localStorage` para el estado del negocio, delegando la persistencia a **MongoDB Atlas**:
+
+1. **`RestaurantContext.jsx`:**
+   - Carga inicial reactiva: mesas desde `GET /pedidos/info-mesas` y catálogo desde `GET /productos/filtrados`.
+   - `submitOrderForTable(tableNumber, cartItems, notes)`: Envía la comanda con items embebidos vía `POST /pedidos`.
+   - `updateTableStatus(tableId, newStatus)`: Actualiza mesas vía `PUT /mesas/{num_mesa}/estado` con *Optimistic UI*.
+   - `toggleProductAvailability(productId)`: Conecta con `PATCH /productos/{id}/disponible` para alternar la disponibilidad de platos en cocina.
+
+2. **`CartContext.jsx`:**
+   - Mantiene temporalmente el carrito por mesa mientras el comensal arma el pedido.
+   - `sendOrder(customNotes)`: Invoca asíncronamente a `submitOrderForTable`, mostrando Toast de éxito solo si el backend responde con código 200/201 y bloqueando envíos duplicados con `sendingOrder`.
+
+3. **`AuthContext.jsx`:**
+   - `login(username, password)`: Autenticación real contra `POST /empleados/login`.
+   - Mapeo automático de roles (`Administrador`, `Cocina`, `Mesero`).
+   - Gestión adecuada de estados de carga (`loading`) y captura de errores HTTP (401/404) y de red.
+
+---
+
+## 🛠️ Comandos de Desarrollo
+
+```bash
+# Instalar dependencias
+pnpm install
+
+# Iniciar servidor de desarrollo (puerto 5173)
+pnpm dev
+
+# Compilar para producción
+pnpm build
+
+# Previsualizar build de producción
+pnpm preview
+```

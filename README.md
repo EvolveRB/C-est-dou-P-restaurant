@@ -1,10 +1,30 @@
 # Sistema de Restaurante (C'est doux P)
 
-Sistema integral de gestión para restaurantes compuesto por un **backend** asíncrono desarrollado en Python con **FastAPI** y base de datos distribuida en la nube con **Turso (SQLite)**, junto con un **frontend** moderno desarrollado en **React 19** y **Vite**.
+Sistema integral de gestión para restaurantes compuesto por un **backend** asíncrono de alto rendimiento desarrollado en Python con **FastAPI** y base de datos NoSQL en la nube con **MongoDB Atlas** (driver asíncrono **Motor**), junto con un **frontend** reactivo desarrollado en **React 19** y **Vite**.
 
-El sistema ofrece una experiencia dual sincronizada: una interfaz **Mobile-First para clientes** accesible directamente mediante códigos QR en cada mesa, y un **panel de control para personal y cocina** optimizado para PC y tablets.
+El sistema ofrece una experiencia dual sincronizada en tiempo real: una interfaz **Mobile-First para clientes** accesible directamente mediante códigos QR en cada mesa, y un **panel de control para personal y cocina** optimizado para PC y tablets.
 
-- **Documentación Swagger interactiva**: [https://embark-magnetism-mosaic.ngrok-free.dev/docs](https://embark-magnetism-mosaic.ngrok-free.dev/docs) (o localmente en `http://localhost:8000/docs`).
+- **Documentación Swagger interactiva**: `http://localhost:8000/docs`.
+
+---
+
+## 🌟 Novedades Recientes de la Versión
+
+1. **Frontend Desacoplado de Simulaciones:**
+   - Se refactorizaron completamente los contextos de React (`RestaurantContext.jsx`, `CartContext.jsx` y `AuthContext.jsx`) eliminando los datos simulados de `localStorage` y `setTimeout`.
+   - Todas las operaciones de carga de mesas, catálogo, pedidos y turnos se sincronizan de forma asíncrona mediante llamadas HTTP `fetch` reales al backend.
+   - Manejo de UI optimista (*Optimistic UI*) con reversión automática ante fallos de red.
+
+2. **Migración Integral a MongoDB Atlas (Motor):**
+   - Transición de la capa de persistencia relacional (SQLite/Turso) a base de datos orientada a documentos en **MongoDB Atlas**.
+   - Conexión no bloqueante (*async/await*) mediante `AsyncIOMotorClient` (`motor.motor_asyncio`).
+   - Modelo de datos con **documentos embebidos** (`items` dentro de `pedidos`, eliminando los costosos JOINs relacionales).
+   - Traducción de las 13 consultas académicas obligatorias a operadores y agregaciones nativas de MongoDB (`$lookup`, `$lt`, `$set`, `$unset`, `drop()`).
+
+3. **Autenticación y Control de Carta en Vivo:**
+   - Nuevo endpoint `POST /empleados/login` con validación de credenciales reales contra la colección `empleados`.
+   - Nuevo endpoint `PATCH /productos/{id}/disponible` para que el cocinero active o pause platillos al instante.
+   - Suite de pruebas automatizadas [`backend/test_suite.py`](backend/test_suite.py) (8/8 pruebas exitosas en tiempo real).
 
 ---
 
@@ -12,17 +32,17 @@ El sistema ofrece una experiencia dual sincronizada: una interfaz **Mobile-First
 
 ### 📱 Experiencia del Cliente (Mobile-First / Acceso por Código QR)
 - **Acceso Directo por Mesa**: El cliente escanea el código QR de su mesa y accede a la URL dedicada `/mesa/:numeroMesa` sin necesidad de registro ni descargas.
-- **Catálogo Interactivo**: Filtrado rápido por categorías (Entradas, Platos de Fondo, Postres, Bebidas) y barra de búsqueda en tiempo real.
+- **Catálogo Interactivo**: Filtrado rápido por categorías (Entradas, Platos de Fondo, Postres, Bebidas) y consulta en vivo desde MongoDB Atlas.
 - **Detalle y Personalización de Platillos**: Modal con selector de cantidades y campo de especificaciones/notas para cocina (ej. término de cocción, sin alérgenos).
-- **Carrito de Compras**: Control de pedidos, edición de cantidades, notas generales de la mesa, cálculo de total y envío de comanda.
+- **Carrito de Compras y Comanda**: Persistencia temporal local mientras el cliente arma el pedido, envío asíncrono (`POST /pedidos`) con items embebidos y bloqueo contra doble envío accidental.
 - **Monitor de Estado del Pedido**: Visualización en vivo del estado de preparación de la mesa (*Esperando*, *En preparación*, *Listo*, *Entregado*).
 - **Indicadores de Disponibilidad**: Platillos no disponibles marcados al instante para evitar pedidos sin stock.
 
 ### 🖥️ Portal de Personal y Cocina (Desktop & Tablet)
-- **Autenticación y Control de Turnos**: Pantalla de acceso centrada con gestión de roles (*Mesero*, *Jefe de Cocina / Chef*, *Administrador*) y persistencia de sesión.
+- **Autenticación y Control de Turnos**: Pantalla de acceso conectada a la base de datos con gestión de roles (*Mesero / Garzón*, *Cocinero / Chef*, *Administrador*) y persistencia de sesión.
 - **Panel de Salón y Mesas**: Cuadrícula dinámica con el estado operativo de todas las mesas del restaurante (*Libre*, *Esperando*, *En preparación*, *Listo*, *Ocupada*).
-- **Comandera Digital Interactiva (`CookOrderModal`)**: Popup al hacer clic en mesas con órdenes activas; permite revisar ítems, cantidades, notas especiales de comensales y actualizar el estado de preparación con un solo clic.
-- **Gestión de Inventario en Tiempo Real**: Pestaña dedicada para habilitar o pausar la disponibilidad de platos del catálogo en vivo.
+- **Comandera Digital Interactiva (`CookOrderModal`)**: Popup al hacer clic en mesas con órdenes activas; permite revisar ítems, cantidades, notas especiales de comensales y actualizar el estado de preparación con un solo clic (`PUT /mesas/{num_mesa}/estado`).
+- **Gestión de Inventario en Tiempo Real**: Pestaña dedicada para habilitar o pausar la disponibilidad de platos del catálogo en vivo mediante `PATCH /productos/{id}/disponible`.
 - **Generador e Impresor de Códigos QR**: Configuración de número de mesas (1 a 50 mesas), previsualización de códigos QR individuales y botón de impresión optimizado para mesas y manteles.
 
 ---
@@ -30,29 +50,31 @@ El sistema ofrece una experiencia dual sincronizada: una interfaz **Mobile-First
 ## Arquitectura del Proyecto
 
 ```text
-doux_p/
+C-est-dou-P-restaurant/
 ├── backend/
-│   ├── database.py         # Configuración y conexión asíncrona a Turso con libsql-client
-│   ├── main.py             # Instancia FastAPI, rutas y las 13 consultas obligatorias
-│   ├── models.py           # Modelos de datos y estructura de entidades del restaurante
-│   ├── schemas.py          # Esquemas Pydantic para validación de entrada/salida
-│   ├── requirements.txt    # Dependencias de Python
-│   └── restaurant.db       # Base de datos SQLite local de respaldo
+│   ├── database.py         # Conexión Singleton no bloqueante a MongoDB Atlas con Motor
+│   ├── main.py             # Instancia FastAPI, CORS, 13 operaciones NoSQL + Auth y Disponibilidad
+│   ├── models.py           # Modelos de datos / entidades de respaldo
+│   ├── test_suite.py       # Suite integral de pruebas automatizadas (8/8 pruebas verificadas)
+│   ├── test_mongo.py       # Script de verificación de conectividad y ping a Atlas
+│   ├── requirements.txt    # Dependencias de Python (FastAPI, Motor, Pymongo, Uvicorn, etc.)
+│   └── .env                # Credenciales MONGO_URI
 │
 └── frontend/
     ├── index.html          # Entrada HTML con metadatos y fuentes
     ├── package.json        # Dependencias (React 19, Vite, React Router, Lucide, QRCode)
+    ├── .env                # Variable VITE_API_URL hacia FastAPI
     └── src/
         ├── App.jsx         # Enrutador principal (rutas de cliente y personal)
         ├── components/
         │   ├── client/     # Componentes móviles (BottomNav, CategoryPills, ClientHeader, ProductCard, etc.)
         │   └── employee/   # Componentes de gestión (CookOrderModal, StaffLoginForm, StaffNavbar)
         ├── context/
-        │   ├── AuthContext.jsx         # Autenticación, roles y sesión de empleados
-        │   ├── CartContext.jsx         # Carrito de compras y comanda de la mesa activa
-        │   └── RestaurantContext.jsx   # Estado global de mesas, pedidos e inventario
+        │   ├── AuthContext.jsx         # Login real contra /empleados/login y roles
+        │   ├── CartContext.jsx         # Carrito temporal y envío async con submitOrderForTable
+        │   └── RestaurantContext.jsx   # Estado global de mesas, catálogo NoSQL y sincronización
         ├── data/
-        │   └── initialProducts.js      # Catálogo base y categorías del menú
+        │   └── initialProducts.js      # Catálogo base de respaldo / fallback offline
         ├── layouts/
         │   ├── ClientLayout.jsx        # Contenedor estilo smartphone para clientes QR
         │   └── EmployeeLayout.jsx      # Plantilla general con autenticación para empleados
@@ -67,53 +89,44 @@ doux_p/
 
 ---
 
-## Resumen de las 13 Consultas SQL y Álgebra Relacional
+## Equivalencias: De Consultas SQL a Operaciones MongoDB (NoSQL)
 
-El sistema cumple rigurosamente con los requerimientos académicos evaluados:
+El backend traduce las 13 consultas obligatorias a sintaxis nativa de MongoDB mediante el driver `motor`:
 
-### 1. Inserciones (`INSERT` - 3 consultas)
-- `POST /mesas`: Registra una nueva mesa en el salón.
-- `POST /productos`: Añade un nuevo producto/plato al menú.
-- `POST /pedidos`: Crea una nueva comanda asociada a una visita y empleado.
+| Nº | Operación / Endpoint | Equivalente SQL | Implementación MongoDB (Motor) |
+| :--- | :--- | :--- | :--- |
+| **1** | `POST /mesas` | `INSERT INTO mesa` | `db.mesas.insert_one(mesa)` |
+| **2** | `POST /productos` | `INSERT INTO producto` | `db.producto.insert_one(producto)` |
+| **3** | `POST /pedidos` | `INSERT INTO pedido + detalle_pedido` | `db.pedidos.insert_one(pedido)` con `items` embebidos |
+| **4** | `GET /productos/filtrados` | `SELECT WHERE precio < ?` | `db.producto.find({"precio": {"$lt": x}})` |
+| **5** | `GET /pedidos/info-mesas` | `SELECT con JOIN (3 tablas)` | Agregación `$lookup` con colección `visitas` para resolver `num_mesa` |
+| **6** | `GET /pedidos/detalles-platos` | `SELECT con JOIN (2 tablas)` | Proyección directa sobre `items` embebidos en `pedidos` |
+| **7** | `PUT /mesas/{num_mesa}/estado` | `UPDATE mesa SET estado = ?` | `db.mesas.update_one({"num_mesa": n}, {"$set": {"estado": s}})` |
+| **8** | `PUT /productos/{id}/precio` | `UPDATE producto SET precio = ?` | `db.producto.update_one(filtro, {"$set": {"precio": p}})` |
+| **9** | `DELETE /productos/{id}` | `DELETE FROM producto WHERE id` | `db.producto.delete_one(filtro)` por `ObjectId` o `id_plato` |
+| **10** | `DELETE /mesas/{num_mesa}` | `DELETE FROM mesa WHERE estado='Libre'` | `db.mesas.delete_one({"num_mesa": n, "estado": "Libre"})` |
+| **11** | `POST /admin/alter-1` | `ALTER TABLE ADD COLUMN telefono` | `db.empleados.update_many({}, {"$set": {"telefono": None}})` |
+| **12** | `DELETE /admin/alter-1/revertir` | `ALTER TABLE DROP COLUMN telefono` | `db.empleados.update_many({}, {"$unset": {"telefono": ""}})` |
+| **13** | `DELETE /admin/drop/promociones`| `DROP TABLE promocion_temporada` | `db.promocion_temporada.drop()` |
 
-### 2. Consultas de Selección (`SELECT` - 3 consultas)
-*Incluyen sus equivalentes formales en Álgebra Relacional:*
-- **SELECT 1 (Filtro simple):** `GET /productos/filtrados`
-  - *Álgebra Relacional:* $\pi_{id\_plato, nombre, precio} (\sigma_{precio < 10000} (producto))$
-- **SELECT 2 (JOIN de 3 tablas):** `GET /pedidos/info-mesas`
-  - *Álgebra Relacional:* $\pi_{id\_pedido, num\_mesa, estado\_pedido, hora\_pedido} ((pedido \bowtie_{id\_visita} visita\_mesa) \bowtie_{num\_mesa} mesa)$
-- **SELECT 3 (JOIN de 2 tablas):** `GET /pedidos/detalles-platos`
-  - *Álgebra Relacional:* $\pi_{id\_detalle, nombre, cantidad, observaciones} (detalle\_pedido \bowtie_{id\_plato} producto)$
-
-### 3. Modificaciones de Datos (`UPDATE` - 2 consultas)
-- `PUT /mesas/{num_mesa}/estado`: Actualiza el estado operativo de una mesa.
-- `PUT /productos/{id_plato}/precio`: Modifica el valor de un plato en el catálogo.
-
-### 4. Eliminaciones (`DELETE` - 2 consultas)
-- `DELETE /productos/{id_plato}`: Elimina un producto específico de la carta por su ID.
-- `DELETE /mesas/{num_mesa}`: Elimina una mesa aplicando restricciones de negocio (estado 'Libre').
-
-### 5. Modificación de Esquema y Estructura (`ALTER` y `DROP` - 3 operaciones)
-- `POST /admin/alter-1` / `DELETE /admin/alter-1/revertir`: Añade o elimina dinámicamente la columna `telefono` en empleados.
-- `POST /admin/alter-2` / `DELETE /admin/alter-2/revertir`: Añade o elimina la columna `fecha_entrega` en pedidos.
-- `POST /admin/preparar-temporada` & `DELETE /admin/drop/promociones`: Demuestra la creación y eliminación en caliente (`DROP TABLE`) de una tabla temporal de promociones.
-
-*(Nota Teórica: Operaciones como INSERT, UPDATE, DELETE, ALTER y DROP corresponden al DML/DDL de SQL y no forman parte del Álgebra Relacional pura, la cual está diseñada exclusivamente para consultas SELECT).*
+### Endpoints Complementarios
+- `POST /empleados/login`: Búsqueda flexible por correo, username o rol (`find_one`), devolviendo sesión normalizada para React.
+- `PATCH /productos/{id}/disponible`: Actualización atómica de `disponibilidad` (`"En stock"` o `"Agotado"`).
+- `POST /admin/alter-2` y `DELETE /admin/alter-2/revertir`: Agrega o remueve el atributo `fecha_entrega` en `pedidos`.
+- `POST /admin/preparar-temporada`: Inicializa la colección temporal con documento semilla.
 
 ---
 
-## Base de Datos (Turso / SQLite)
+## Base de Datos (MongoDB Atlas)
 
-La base de datos se encuentra alojada en **Turso** (SQLite distribuido), garantizando baja latencia y alta disponibilidad.
+El clúster en la nube aloja la base de datos `restaurante_db` organizada en las siguientes colecciones:
 
-**Esquema de tablas:**
-- `mesa`: Registro y estado operativo de mesas.
-- `producto`: Carta de platillos, precios y descripciones.
-- `empleado`: Personal de servicio, roles y datos de contacto.
-- `visita_mesa`: Apertura y control de sesiones por mesa.
-- `pedido`: Comandas asociadas a visitas y atendidas por empleados.
-- `detalle_pedido`: Relación de ítems, cantidades y especificaciones de comanda.
-- `pago`: Registro de métodos de pago y liquidación de cuentas.
+- **`mesas`**: Control de mesas y estado (`num_mesa`, `estado`, `piso`).
+- **`producto`**: Catálogo de la carta (`_id`, `id_plato`, `nombre`, `categoria`, `precio`, `disponibilidad`, `tiempo_preparacion`, `imagen`, `descripcion`).
+- **`pedidos`**: Comandas con ítems embebidos (`num_mesa`, `hora_pedido`, `estado_pedido`, `items: [{ producto_id, nombre, precio_unitario, cantidad, observaciones }]`, `subtotal`).
+- **`visitas`**: Control de sesiones de comensales en mesa (`id_visita`, `num_mesa`, `hora_inicio`, `estado_visita`, `pagos`).
+- **`empleados`**: Personal con credenciales y roles (`nombre`, `correo`, `rol`, `password_hash`).
+- **`promocion_temporada`**: Colección temporal demostrativa para operaciones de ciclo de vida (`drop()`).
 
 ---
 
@@ -121,13 +134,13 @@ La base de datos se encuentra alojada en **Turso** (SQLite distribuido), garanti
 
 ### Prerrequisitos
 - **Python 3.10+**
-- **Node.js 18+** y **npm**
+- **Node.js 18+** y **pnpm** (o npm)
 
 ---
 
-### 1. Configurar y Ejecutar el Backend
+### 1. Backend (FastAPI + MongoDB Atlas)
 
-1. Navega a la carpeta del backend:
+1. Ingresa a la carpeta del backend:
    ```bash
    cd backend
    ```
@@ -149,39 +162,47 @@ La base de datos se encuentra alojada en **Turso** (SQLite distribuido), garanti
    pip install -r requirements.txt
    ```
 
-4. Configura las variables de entorno:
-   Verifica o crea el archivo `backend/.env` con tus credenciales de Turso:
+4. Configura las variables de entorno en `backend/.env`:
    ```env
-   TURSO_DATABASE_URL=libsql://tu-base-de-datos.turso.io
-   TURSO_AUTH_TOKEN=tu_token_de_turso
+   MONGO_URI=mongodb+srv://<usuario>:<password>@cluster.mongodb.net/restaurante_db?retryWrites=true&w=majority
    ```
 
-5. Inicia el servidor de desarrollo FastAPI:
+5. *(Opcional)* Ejecuta la suite de verificación automatizada:
    ```bash
-   uvicorn main:app --reload
+   python test_suite.py
    ```
-   La API quedará disponible en `http://localhost:8000`.
+   Debe arrojar `8/8 PRUEBAS EXITOSAS`.
 
-6. Accede a la documentación interactiva Swagger:
-   - [http://localhost:8000/docs](http://localhost:8000/docs)
+6. Inicia el servidor de desarrollo:
+   ```bash
+   uvicorn main:app --reload --port 8000
+   ```
+   Accede a la documentación interactiva Swagger en: `http://localhost:8000/docs`.
 
 ---
 
-### 2. Configurar y Ejecutar el Frontend
+### 2. Frontend (React 19 + Vite)
 
-1. Abre una nueva terminal y navega a la carpeta del frontend:
+1. En una nueva terminal, ingresa a la carpeta del frontend:
    ```bash
    cd frontend
    ```
 
-2. Instala las dependencias de Node.js:
-   ```bash
-   npm install
+2. Configura la URL del backend en `frontend/.env`:
+   ```env
+   VITE_API_URL=http://localhost:8000
    ```
 
-3. Inicia el servidor de desarrollo de Vite:
+3. Instala los paquetes:
    ```bash
-   npm run dev
+   pnpm install
+   # o bien: npm install
+   ```
+
+4. Inicia el servidor Vite:
+   ```bash
+   pnpm dev
+   # o bien: npm run dev
    ```
    La aplicación se abrirá en `http://localhost:5173`.
 
@@ -191,13 +212,14 @@ La base de datos se encuentra alojada en **Turso** (SQLite distribuido), garanti
 
 | Ruta | Audiencia | Descripción |
 | :--- | :--- | :--- |
-| `/` | Personal / Cocina | Portal principal para empleados. Solicita login si no hay sesión y da acceso a la comandera, salón e inventario. |
-| `/staff/qrs` | Personal / Admin | Generador de códigos QR para imprimir y colocar en cada mesa del restaurante. |
+| `/` | Personal / Cocina | Portal principal para empleados. Solicita login autenticado contra MongoDB y da acceso a la comandera, salón e inventario. |
+| `/staff/qrs` | Personal / Admin | Generador e impresor de códigos QR por mesa. |
 | `/mesa/:numeroMesa` | Clientes (QR) | Vista exclusiva tipo smartphone para clientes de la mesa indicada (ej. `/mesa/1`, `/mesa/2`). |
-| `/menu` / `/cliente` | Clientes | Redirecciones directas a `/mesa/1` para pruebas rápidas. |
+| `/menu` / `/cliente` | Clientes | Accesos rápidos de redirección a mesa para pruebas. |
 
 ### Flujo de Prueba Recomendado
-1. Abre `http://localhost:5173/` e inicia sesión como cocinero o mesero.
-2. Ve a la sección **Códigos QR** (`/staff/qrs`) o abre en una ventana incógnito/móvil la ruta `http://localhost:5173/mesa/1`.
-3. Desde la vista de la mesa 1, agrega productos al carrito con notas especiales y pulsa **Confirmar Pedido**.
-4. Revisa la pestaña **Estado** en el móvil del cliente y el panel del personal en la PC: verás la mesa 1 pasar a **Esperando** y podrás abrir la comanda para pasarla a **En preparación** o **Listo**.
+1. Abre `http://localhost:5173/` e inicia sesión como Administrador (`admin@restaurant.cl`) o Cocinero.
+2. Abre en otra pestaña o ventana de incógnito la ruta del cliente `http://localhost:5173/mesa/1`.
+3. Desde la mesa 1, agrega platillos al carrito, añade observaciones para cocina y pulsa **Confirmar Pedido**.
+4. En el panel de cocina verás la comanda reflejada en tiempo real desde MongoDB Atlas con sus items embebidos.
+5. Cambia el estado de la mesa a **En preparación** o **Listo** y comprueba cómo se actualiza automáticamente el monitor del cliente.
