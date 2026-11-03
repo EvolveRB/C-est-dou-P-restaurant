@@ -216,7 +216,7 @@ export function CartProvider({ children }) {
       const targetId = currentTable?.visita_activa_id || tableNumber;
 
       if (llamarGarzon) {
-        await llamarGarzon(targetId, motivo);
+        await llamarGarzon(tableNumber, motivo);
       }
       showToast(`🔔 Garzón llamado: Un mesero se acerca a la Mesa ${tableNumber}.`);
     } catch (err) {

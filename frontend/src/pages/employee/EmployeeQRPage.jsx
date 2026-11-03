@@ -64,7 +64,7 @@ export default function EmployeeQRPage() {
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
             <Link to="/" style={{ color: '#64748B', display: 'flex', alignItems: 'center', gap: '4px', textDecoration: 'none', fontSize: '13px' }}>
               <ArrowLeft size={14} />
-              <span>Volver al Salón</span>
+              <span>Volver al Panel</span>
             </Link>
           </div>
           <h1 style={{ fontSize: '24px', fontWeight: 800, color: '#1E242E' }}>

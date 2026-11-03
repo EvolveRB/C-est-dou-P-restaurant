@@ -290,6 +290,34 @@ export function RestaurantProvider({ children }) {
   const [loadingTables, setLoadingTables] = useState(true);
   const [loadingProducts, setLoadingProducts] = useState(true);
 
+  // ── Llamadas a Garzón en Salón (RF-08 con destello reactivo para Garzones) ──
+  const [llamadasGarzon, setLlamadasGarzon] = useState(() => {
+    try {
+      const saved = localStorage.getItem('cest_doux_llamadas_garzon');
+      return saved ? JSON.parse(saved) : {};
+    } catch {
+      return {};
+    }
+  });
+
+  useEffect(() => {
+    const handleLlamadaSync = (e) => {
+      try {
+        if (e.type === 'storage' && e.key === 'cest_doux_llamadas_garzon') {
+          setLlamadasGarzon(e.newValue ? JSON.parse(e.newValue) : {});
+        } else if (e.type === 'cest_doux_llamada_garzon_event') {
+          setLlamadasGarzon(e.detail || {});
+        }
+      } catch {}
+    };
+    window.addEventListener('storage', handleLlamadaSync);
+    window.addEventListener('cest_doux_llamada_garzon_event', handleLlamadaSync);
+    return () => {
+      window.removeEventListener('storage', handleLlamadaSync);
+      window.removeEventListener('cest_doux_llamada_garzon_event', handleLlamadaSync);
+    };
+  }, []);
+
   // ── Empleados (Plantilla de trabajadores) ──────────────────────────────────
   const DEFAULT_EMPLOYEES = [
     {
@@ -434,6 +462,32 @@ export function RestaurantProvider({ children }) {
       if (!res.ok) throw new Error(`HTTP ${res.status} al obtener mesas`);
       const data = await res.json();
       setTables(normalizeMesas(data, tableCountRef.current));
+
+      if (Array.isArray(data)) {
+        const backendCalls = {};
+        let hasBackendCalls = false;
+        data.forEach((p) => {
+          if (p.solicitud_garzon && p.solicitud_garzon.activa) {
+            const mNum = parseInt(p.num_mesa, 10);
+            if (!isNaN(mNum)) {
+              backendCalls[mNum] = {
+                timestamp: Date.now(),
+                motivo: p.solicitud_garzon.motivo || 'Atención solicitada en mesa'
+              };
+              hasBackendCalls = true;
+            }
+          }
+        });
+        if (hasBackendCalls) {
+          setLlamadasGarzon((prev) => {
+            const merged = { ...prev, ...backendCalls };
+            try {
+              localStorage.setItem('cest_doux_llamadas_garzon', JSON.stringify(merged));
+            } catch {}
+            return merged;
+          });
+        }
+      }
     } catch (err) {
       console.error('[RestaurantContext] fetchTables error:', err);
       setTables((prev) => (prev && prev.length > 0 ? prev : INITIAL_TEST_TABLES));
@@ -688,20 +742,49 @@ export function RestaurantProvider({ children }) {
   };
 
   const llamarGarzon = async (visitaIdOrMesa, motivo = 'Atención solicitada en mesa') => {
+    const mesaNum = parseInt(visitaIdOrMesa, 10);
+    if (!isNaN(mesaNum)) {
+      setLlamadasGarzon((prev) => {
+        const next = { ...prev, [mesaNum]: { timestamp: Date.now(), motivo } };
+        try {
+          localStorage.setItem('cest_doux_llamadas_garzon', JSON.stringify(next));
+          window.dispatchEvent(new CustomEvent('cest_doux_llamada_garzon_event', { detail: next }));
+        } catch {}
+        return next;
+      });
+    }
+
     try {
       const res = await fetch(`${API_URL}/visitas/${visitaIdOrMesa}/llamar-garzon`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ motivo })
       });
-      if (!res.ok) {
-        const errText = await res.text();
-        throw new Error(`HTTP ${res.status}: ${errText}`);
+      if (res.ok) {
+        return await res.json();
       }
-      return await res.json();
     } catch (err) {
-      console.error('[RestaurantContext] llamarGarzon error:', err);
-      throw err;
+      console.warn('[RestaurantContext] llamarGarzon error:', err);
+    }
+    return { status: 'notified', mesa: mesaNum };
+  };
+
+  const atenderLlamada = async (mesaId) => {
+    const mesaNum = parseInt(mesaId, 10);
+    setLlamadasGarzon((prev) => {
+      const next = { ...prev };
+      delete next[mesaNum];
+      try {
+        localStorage.setItem('cest_doux_llamadas_garzon', JSON.stringify(next));
+        window.dispatchEvent(new CustomEvent('cest_doux_llamada_garzon_event', { detail: next }));
+      } catch {}
+      return next;
+    });
+
+    try {
+      await fetch(`${API_URL}/visitas/${mesaNum}/atender-garzon`, { method: 'PATCH' });
+    } catch (err) {
+      console.warn('[RestaurantContext] atenderLlamada backend sync:', err);
     }
   };
 
@@ -757,6 +840,8 @@ export function RestaurantProvider({ children }) {
         toggleProductAvailability,
         validarQrMesa,
         llamarGarzon,
+        atenderLlamada,
+        llamadasGarzon,
         loadingTables,
         loadingProducts,
         resetTable,

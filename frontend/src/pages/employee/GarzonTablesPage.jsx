@@ -1,15 +1,19 @@
 import { useState } from 'react';
 import { useRestaurant } from '../../context/RestaurantContext';
 import CookOrderModal from '../../components/employee/CookOrderModal';
-import { Utensils, CheckCircle2, Clock, AlertCircle } from 'lucide-react';
+import { Utensils, BellRing } from 'lucide-react';
 
 export default function GarzonTablesPage() {
-  const { tables } = useRestaurant();
+  const { tables, llamadasGarzon, atenderLlamada } = useRestaurant();
   const [selectedTable, setSelectedTable] = useState(null);
   const [filter, setFilter] = useState('todas'); // 'todas', 'ocupadas', 'libres'
 
   const handleTableClick = (mesa) => {
-    // Si la mesa tiene un pedido activo o está ocupada, abre la comanda
+    // Si la mesa tenía una llamada de garzón activa, se atiende y se apaga el destello luminoso
+    if (llamadasGarzon && llamadasGarzon[mesa.id]) {
+      atenderLlamada(mesa.id);
+    }
+    // Si la mesa tiene un pedido activo o está ocupada, abre la comanda detallada
     if (mesa.pedido && mesa.estado !== 'Libre') {
       setSelectedTable(mesa);
     }
@@ -25,6 +29,7 @@ export default function GarzonTablesPage() {
 
   const totalOcupadas = tables.filter((t) => t.estado !== 'Libre').length;
   const totalLibres = tables.filter((t) => t.estado === 'Libre').length;
+  const totalLlamadas = Object.keys(llamadasGarzon || {}).length;
 
   return (
     <div style={{
@@ -36,6 +41,28 @@ export default function GarzonTablesPage() {
       padding: '24px 28px',
       boxSizing: 'border-box'
     }}>
+      {/* Estilos embebidos para el destello luminoso exclusivo del Garzón */}
+      <style>{`
+        @keyframes destelloLlamadaGarzon {
+          0% {
+            box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.75), 0 0 12px rgba(245, 158, 11, 0.45);
+            border-color: #EF4444;
+            transform: scale(1);
+          }
+          50% {
+            box-shadow: 0 0 32px 10px rgba(239, 68, 68, 0.85), 0 0 54px 18px rgba(245, 158, 11, 0.65);
+            border-color: #F59E0B;
+            background-color: #FEF2F2 !important;
+            transform: scale(1.025);
+          }
+          100% {
+            box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.75), 0 0 12px rgba(245, 158, 11, 0.45);
+            border-color: #EF4444;
+            transform: scale(1);
+          }
+        }
+      `}</style>
+
       {/* Contenedor Exclusivo de Mesas para el Garzón */}
       <div style={{
         width: '100%',
@@ -49,7 +76,7 @@ export default function GarzonTablesPage() {
         flexDirection: 'column',
         boxSizing: 'border-box'
       }}>
-        {/* Encabezado sin subtítulos grises */}
+        {/* Encabezado con contador y avisos de atención */}
         <div style={{
           display: 'flex',
           justifyContent: 'space-between',
@@ -74,6 +101,25 @@ export default function GarzonTablesPage() {
             }}>
               {tables.length} {tables.length === 1 ? 'mesa' : 'mesas'}
             </span>
+
+            {totalLlamadas > 0 && (
+              <span style={{
+                backgroundColor: '#DC2626',
+                color: '#FFFFFF',
+                fontSize: '12.5px',
+                fontWeight: 800,
+                padding: '6px 14px',
+                borderRadius: '9999px',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                boxShadow: '0 2px 10px rgba(220, 38, 38, 0.35)',
+                animation: 'pulse 1.2s infinite'
+              }}>
+                <BellRing size={14} />
+                <span>{totalLlamadas} {totalLlamadas === 1 ? 'mesa solicita atención' : 'mesas solicitan atención'}</span>
+              </span>
+            )}
           </div>
 
           {/* Filtros rápidos de estado de mesa */}
@@ -126,7 +172,7 @@ export default function GarzonTablesPage() {
           </div>
         </div>
 
-        {/* Grilla exclusiva de mesas */}
+        {/* Grilla exclusiva de mesas con destello reactivo para el Garzón */}
         <div style={{
           display: 'grid',
           gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))',
@@ -138,6 +184,7 @@ export default function GarzonTablesPage() {
             const hasOrder = mesa.pedido !== null && mesa.estado !== 'Libre';
             const isReady = mesa.estado === 'Listo para servir';
             const isWaiting = mesa.estado === 'Esperando';
+            const hasLlamada = Boolean(llamadasGarzon && llamadasGarzon[mesa.id]);
 
             let cardBg = '#FAF5F0';
             let cardBorder = '1px solid #E8DDD2';
@@ -158,7 +205,8 @@ export default function GarzonTablesPage() {
                 key={mesa.id}
                 onClick={() => handleTableClick(mesa)}
                 style={{
-                  minHeight: '130px',
+                  height: '145px',
+                  boxSizing: 'border-box',
                   borderRadius: '18px',
                   backgroundColor: cardBg,
                   color: cardColor,
@@ -169,18 +217,49 @@ export default function GarzonTablesPage() {
                   alignItems: 'center',
                   justifyContent: 'center',
                   gap: '10px',
-                  cursor: hasOrder ? 'pointer' : 'default',
+                  cursor: (hasOrder || hasLlamada) ? 'pointer' : 'default',
                   transition: 'all 0.15s ease',
-                  boxShadow: hasOrder ? '0 6px 16px rgba(216, 107, 82, 0.18)' : 'none'
+                  position: 'relative',
+                  animation: hasLlamada ? 'destelloLlamadaGarzon 1.2s infinite ease-in-out' : 'none',
+                  boxShadow: hasLlamada
+                    ? '0 0 24px rgba(220, 38, 38, 0.6)'
+                    : hasOrder
+                      ? '0 6px 16px rgba(216, 107, 82, 0.18)'
+                      : 'none'
                 }}
-                title={hasOrder ? `Ver comanda de Mesa ${mesa.id}` : `Mesa ${mesa.id} disponible`}
+                title={
+                  hasLlamada
+                    ? `¡Mesa ${mesa.id} solicitó garzón! Clic para atender`
+                    : hasOrder
+                      ? `Ver comanda de Mesa ${mesa.id}`
+                      : `Mesa ${mesa.id} disponible`
+                }
               >
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <Utensils size={18} />
                   <span style={{ fontSize: '21px', fontWeight: 800 }}>Mesa {mesa.id}</span>
+                  {hasLlamada && <BellRing size={18} color="#DC2626" />}
                 </div>
 
-                {hasOrder ? (
+                {hasLlamada ? (
+                  <span style={{
+                    fontSize: '12px',
+                    fontWeight: 800,
+                    padding: '5px 14px',
+                    borderRadius: '9999px',
+                    backgroundColor: '#DC2626',
+                    color: '#FFFFFF',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    boxShadow: '0 3px 10px rgba(220, 38, 38, 0.45)',
+                    letterSpacing: '0.3px',
+                    textTransform: 'uppercase'
+                  }}>
+                    <BellRing size={13} strokeWidth={2.8} />
+                    <span>¡Atención solicitada!</span>
+                  </span>
+                ) : hasOrder ? (
                   <span style={{
                     fontSize: '12.5px',
                     fontWeight: 700,
@@ -189,7 +268,7 @@ export default function GarzonTablesPage() {
                     backgroundColor: isReady ? '#D1FAE5' : isWaiting ? '#FEF3C7' : '#FEE2E2',
                     color: isReady ? '#065F46' : isWaiting ? '#B45309' : '#B91C1C'
                   }}>
-                    {isReady ? '🍽️ Listo para servir' : isWaiting ? 'Esperando comanda' : 'En preparación'}
+                    {isReady ? 'Listo para servir' : isWaiting ? 'Esperando comanda' : 'En preparación'}
                   </span>
                 ) : (
                   <span style={{ fontSize: '13px', fontWeight: 600, color: '#10B981' }}>
@@ -213,4 +292,3 @@ export default function GarzonTablesPage() {
     </div>
   );
 }
-

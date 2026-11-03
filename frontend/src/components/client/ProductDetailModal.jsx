@@ -1,26 +1,35 @@
 import { useState, useEffect } from 'react';
-import { X, Clock, Plus, Minus, ChefHat, Ban, Tag } from 'lucide-react';
-import PlaceholderIcon from './PlaceholderIcon';
+import { X, Clock, Plus, Minus, ChefHat, Ban, Tag, UtensilsCrossed } from 'lucide-react';
 import { formatPrice } from '../../data/initialProducts';
 import { useCart } from '../../context/CartContext';
+
+function formatDishUrl(src) {
+  if (!src) return '/plato_alpha.jpg';
+  if (src.startsWith('http://') || src.startsWith('https://') || src.startsWith('data:')) {
+    return src;
+  }
+  const clean = src.replace(/^\/+/, '');
+  return `/${clean}`;
+}
 
 export default function ProductDetailModal({ product, onClose }) {
   const [qty, setQty] = useState(1);
   const [notes, setNotes] = useState('');
   const [imgError, setImgError] = useState(false);
-  const [currentSrc, setCurrentSrc] = useState(product?.imagen);
+  const [currentSrc, setCurrentSrc] = useState(() => formatDishUrl(product?.imagen));
   const { addToCart } = useCart();
 
   useEffect(() => {
-    setCurrentSrc(product?.imagen);
+    setCurrentSrc(formatDishUrl(product?.imagen));
     setImgError(false);
   }, [product?.imagen]);
 
   const handleImgError = () => {
-    if (currentSrc && currentSrc.startsWith('/Imagenes/')) {
-      setCurrentSrc(currentSrc.replace('/Imagenes/', '/'));
-    } else if (currentSrc && !currentSrc.startsWith('http') && !currentSrc.includes('localhost:8000')) {
-      setCurrentSrc(`http://localhost:8000${currentSrc.startsWith('/') ? '' : '/'}${currentSrc}`);
+    if (currentSrc && !currentSrc.startsWith('/Imagenes/')) {
+      const clean = currentSrc.replace(/^\/+/, '');
+      setCurrentSrc(`/Imagenes/${clean}`);
+    } else if (currentSrc !== '/plato_alpha.jpg') {
+      setCurrentSrc('/plato_alpha.jpg');
     } else {
       setImgError(true);
     }
@@ -60,7 +69,7 @@ export default function ProductDetailModal({ product, onClose }) {
           </button>
         </div>
 
-        {/* RF-05: Badges visuales de etiquetas */}
+        {/* RF-05: Badges visuales de etiquetas (sin emojis) */}
         {etiquetas.length > 0 && (
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginBottom: '12px' }}>
             {etiquetas.map((tag, idx) => (
@@ -75,7 +84,7 @@ export default function ProductDetailModal({ product, onClose }) {
         <div style={{
           width: '100%',
           height: '140px',
-          backgroundColor: 'var(--c-cream-placeholder)',
+          backgroundColor: 'var(--c-terracotta-light)',
           borderRadius: '16px',
           display: 'flex',
           alignItems: 'center',
@@ -111,7 +120,16 @@ export default function ProductDetailModal({ product, onClose }) {
               style={{ width: '100%', height: '100%', objectFit: 'cover' }}
             />
           ) : (
-            <PlaceholderIcon className="placeholder-icon" style={{ width: '56px', height: '56px' }} />
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: '100%',
+              height: '100%',
+              backgroundColor: 'var(--c-terracotta-light)'
+            }}>
+              <UtensilsCrossed size={42} color="var(--c-terracotta)" />
+            </div>
           )}
         </div>
 

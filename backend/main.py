@@ -711,7 +711,8 @@ async def select_pedidos_info_mesas(db=Depends(get_db)):
                     "items": {"$first": "$items"},
                     "subtotal": {"$first": "$subtotal"},
                     "total": {"$first": "$total"},
-                    "notas": {"$first": "$notas"}
+                    "notas": {"$first": "$notas"},
+                    "solicitud_garzon": {"$first": {"$arrayElemAt": ["$visita_info.solicitud_garzon", 0]}}
                 }
             },
             {
@@ -724,7 +725,8 @@ async def select_pedidos_info_mesas(db=Depends(get_db)):
                     "items": 1,
                     "subtotal": 1,
                     "total": 1,
-                    "notas": 1
+                    "notas": 1,
+                    "solicitud_garzon": 1
                 }
             }
         ]
@@ -907,6 +909,37 @@ async def llamar_garzon(visita_id: str, datos: LlamarGarzonInput, db=Depends(get
         return {"mensaje": "Garzón llamado exitosamente", "visita_id": visita_id}
     except HTTPException:
         raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=repr(e))
+
+
+@app.patch("/visitas/{visita_id}/atender-garzon", tags=["Visita"])
+async def atender_garzon(visita_id: str, db=Depends(get_db)):
+    """
+    Desactiva la solicitud de garzón (solicitud_garzon.activa: False) para la visita o mesa indicada.
+    """
+    try:
+        filtro_id = None
+        try:
+            filtro_id = {"_id": ObjectId(visita_id)}
+        except Exception:
+            filtro_id = {"_id": visita_id}
+
+        await db.visitas.update_one(
+            filtro_id,
+            {"$set": {"solicitud_garzon.activa": False, "solicitud_garzon.hora_atendida": datetime.utcnow().isoformat()}}
+        )
+
+        try:
+            num_m = int(visita_id)
+            await db.visitas.update_many(
+                {"$or": [{"num_mesa": num_m}, {"num_mesa": str(num_m)}], "estado_visita": "Activa"},
+                {"$set": {"solicitud_garzon.activa": False, "solicitud_garzon.hora_atendida": datetime.utcnow().isoformat()}}
+            )
+        except Exception:
+            pass
+
+        return {"mensaje": "Solicitud de garzón atendida exitosamente", "visita_id": visita_id}
     except Exception as e:
         raise HTTPException(status_code=500, detail=repr(e))
 
