@@ -13,13 +13,14 @@ export default function ProductDetailModal({ product, onClose }) {
 
   const isAvailable = product.disponible !== false;
 
-  const handleAdd = () => {
+  const handleAdd = (e) => {
+    if (e && e.stopPropagation) e.stopPropagation();
     if (!isAvailable) return;
     addToCart(product, qty, notes);
     onClose();
   };
 
-  const itemSubtotal = product.precio * qty;
+  const itemSubtotal = Number(product.precio ?? 0) * (qty || 1);
 
   return (
     <div className="modal-overlay" onClick={onClose}>

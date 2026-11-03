@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { useRestaurant } from './RestaurantContext';
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -10,7 +10,7 @@ import { useRestaurant } from './RestaurantContext';
 const CartContext = createContext(null);
 
 export function CartProvider({ children }) {
-  const { tables, submitOrderForTable } = useRestaurant();
+  const { tables, submitOrderForTable, resetTable } = useRestaurant();
 
   // ──────────────────────────────────────────────────────────────────────────
   // Estado: número de mesa activa (leído del QR)
@@ -36,6 +36,9 @@ export function CartProvider({ children }) {
 
   // Estado de carga del envío (evita doble-clic mientras el backend responde)
   const [sendingOrder, setSendingOrder] = useState(false);
+
+  // Pedido recién enviado (garantiza que activeOrder se refleje al instante)
+  const [lastSubmittedOrder, setLastSubmittedOrder] = useState(null);
 
   // ──────────────────────────────────────────────────────────────────────────
   // Persistencia temporal del carrito en localStorage (por mesa)
@@ -100,8 +103,9 @@ export function CartProvider({ children }) {
 
   // ──────────────────────────────────────────────────────────────────────────
   // updateTable — se llama al escanear el QR (/mesa/:num)
+  // Memoizada con useCallback para evitar re-renders y ciclos infinitos
   // ──────────────────────────────────────────────────────────────────────────
-  const updateTable = (num) => {
+  const updateTable = useCallback((num) => {
     if (!num) return;
     const strNum = String(num);
     setTableNumber(strNum);
@@ -113,36 +117,43 @@ export function CartProvider({ children }) {
       const cartToRestore = tableCart || generalCart;
       if (cartToRestore) {
         const parsed = JSON.parse(cartToRestore);
-        if (Array.isArray(parsed) && parsed.length > 0) setCart(parsed);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setCart(parsed);
+        }
       }
     } catch {}
-  };
+  }, []);
 
   // ──────────────────────────────────────────────────────────────────────────
   // Operaciones del carrito
   // ──────────────────────────────────────────────────────────────────────────
   const addToCart = (product, qty = 1, note = '') => {
+    if (!product) return;
+    const parsedQty = Math.max(1, parseInt(qty, 10) || 1);
+    const prodId = String(product.id ?? product._id ?? product.id_plato ?? '');
+
     setCart((prev) => {
-      const index = prev.findIndex((item) => item.product.id === product.id);
+      const index = prev.findIndex((item) => String(item.product?.id ?? item.id) === prodId);
       if (index > -1) {
         const next = [...prev];
         next[index] = {
           ...next[index],
-          quantity: next[index].quantity + qty,
+          quantity: next[index].quantity + parsedQty,
           note: note || next[index].note
         };
         return next;
       }
-      return [...prev, { product, quantity: qty, note }];
+      return [...prev, { product, quantity: parsedQty, note }];
     });
     showToast(`"${product.nombre}" agregado al pedido`);
   };
 
   const updateQuantity = (productId, delta) => {
+    const strId = String(productId);
     setCart((prev) =>
       prev
         .map((item) => {
-          if (item.product.id === productId) {
+          if (String(item.product?.id ?? item.id) === strId) {
             const newQty = item.quantity + delta;
             return newQty > 0 ? { ...item, quantity: newQty } : null;
           }
@@ -153,41 +164,40 @@ export function CartProvider({ children }) {
   };
 
   const removeFromCart = (productId) => {
-    setCart((prev) => prev.filter((item) => item.product.id !== productId));
+    const strId = String(productId);
+    setCart((prev) => prev.filter((item) => String(item.product?.id ?? item.id) !== strId));
   };
 
   const clearCart = () => setCart([]);
 
+  const resetActiveTable = async () => {
+    clearCart();
+    setLastSubmittedOrder(null);
+    if (tableNumber) {
+      try {
+        localStorage.removeItem(`carrito_cest_dou_p_mesa_${tableNumber}`);
+        localStorage.removeItem('carrito_cest_dou_p');
+      } catch {}
+      if (resetTable) {
+        await resetTable(tableNumber);
+      }
+    }
+    showToast('Mesa lista para un nuevo pedido');
+  };
+
   // ──────────────────────────────────────────────────────────────────────────
   // sendOrder — envía el pedido al backend a través de submitOrderForTable
-  //
-  // Cambios respecto a la versión anterior:
-  //  • Es ahora async/await ya que submitOrderForTable hace un fetch real
-  //  • El toast de éxito solo se muestra si el backend responde con 2xx
-  //  • Los errores de red o 4xx/5xx muestran un toast de error y no borran el carrito
-  //  • sendingOrder previene envíos duplicados
   // ──────────────────────────────────────────────────────────────────────────
-  /**
-   * Envía el carrito actual como pedido al backend.
-   *
-   * @param {string} customNotes - Notas adicionales del cliente
-   * @returns {Promise<Object|null>} - El pedido creado, o null si el carrito está vacío o hay error
-   */
   const sendOrder = async (customNotes = '') => {
     if (cart.length === 0) return null;
     if (sendingOrder) return null; // Evita doble-clic
 
     setSendingOrder(true);
     try {
-      // submitOrderForTable es async y lanza un Error si el backend falla (4xx/5xx)
       const newOrder = await submitOrderForTable(tableNumber, cart, customNotes);
-
-      // Solo llega aquí si el backend respondió con 2xx
+      setLastSubmittedOrder(newOrder);
       showToast('✅ Pedido enviado a cocina con éxito');
       console.info('[CartContext] Pedido confirmado por backend:', newOrder);
-
-      // IMPORTANTE: No vaciamos el carrito en localStorage;
-      // se preserva hasta que se finalice el pago
       return newOrder;
     } catch (err) {
       console.error('[CartContext] sendOrder falló:', err);
@@ -201,17 +211,26 @@ export function CartProvider({ children }) {
   // ──────────────────────────────────────────────────────────────────────────
   // Datos derivados
   // ──────────────────────────────────────────────────────────────────────────
-  const currentTableState = tables.find((t) => t.id === parseInt(tableNumber, 10));
-  const activeOrder = currentTableState?.pedido
+  const currentTableState = tables.find((t) => String(t.id) === String(tableNumber));
+  const activeOrder = (currentTableState && currentTableState.pedido && currentTableState.estado !== 'Libre')
     ? {
         ...currentTableState.pedido,
         mesa: tableNumber,
         estado: currentTableState.estado
       }
-    : null;
+    : (lastSubmittedOrder && String(lastSubmittedOrder.num_mesa) === String(tableNumber))
+      ? {
+          ...lastSubmittedOrder,
+          mesa: tableNumber,
+          estado: 'Esperando'
+        }
+      : null;
 
-  const totalItems = cart.reduce((sum, item) => sum + item.quantity, 0);
-  const totalPrice = cart.reduce((sum, item) => sum + item.product.precio * item.quantity, 0);
+  const totalItems = cart.reduce((sum, item) => sum + (item.quantity || 1), 0);
+  const totalPrice = cart.reduce(
+    (sum, item) => sum + Number(item.product?.precio ?? item.precio ?? 0) * (item.quantity || 1),
+    0
+  );
 
   // ──────────────────────────────────────────────────────────────────────────
   // Context value — misma firma que la versión anterior para no romper la UI
@@ -226,6 +245,7 @@ export function CartProvider({ children }) {
         updateQuantity,
         removeFromCart,
         clearCart,
+        resetActiveTable,
         sendOrder,
         activeOrder,
         totalItems,

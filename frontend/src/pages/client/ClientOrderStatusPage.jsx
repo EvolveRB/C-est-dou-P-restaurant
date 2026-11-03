@@ -3,7 +3,7 @@ import { useCart } from '../../context/CartContext';
 import { formatPrice } from '../../data/initialProducts';
 
 export default function ClientOrderStatusPage({ onGoToMenu }) {
-  const { activeOrder, tableNumber } = useCart();
+  const { activeOrder, tableNumber, resetActiveTable } = useCart();
 
   if (!activeOrder) {
     return (
@@ -35,7 +35,9 @@ export default function ClientOrderStatusPage({ onGoToMenu }) {
             padding: '11px 22px',
             borderRadius: 'var(--radius-pill)',
             fontWeight: 700,
-            fontSize: '13.5px'
+            fontSize: '13.5px',
+            border: 'none',
+            cursor: 'pointer'
           }}
         >
           Ver Menú
@@ -44,11 +46,35 @@ export default function ClientOrderStatusPage({ onGoToMenu }) {
     );
   }
 
+  const isEsperando = activeOrder.estado === 'Esperando';
+  const isEnPreparacion = activeOrder.estado === 'En preparación';
+  const isListo = activeOrder.estado === 'Listo para servir' || activeOrder.estado === 'Listo' || activeOrder.estado === 'Enviado a mesa';
+
   const steps = [
-    { label: 'Pedido recibido', desc: 'Comanda confirmada en cocina', done: true, icon: CheckCircle2 },
-    { label: 'En preparación', desc: 'El chef está elaborando tus platos', done: true, current: true, icon: ChefHat },
-    { label: 'Listo para servir', desc: 'El mesero llevará el pedido a tu mesa', done: false, icon: Utensils }
+    {
+      label: 'Pedido recibido',
+      desc: isEsperando ? 'Comanda recibida, en cola de cocina' : 'Comanda confirmada en cocina',
+      done: true,
+      current: isEsperando,
+      icon: CheckCircle2
+    },
+    {
+      label: 'En preparación',
+      desc: isEnPreparacion ? 'El chef está elaborando tus platos ahora' : isListo ? 'Platos finalizados por cocina' : 'En espera de elaboración',
+      done: isEnPreparacion || isListo,
+      current: isEnPreparacion,
+      icon: ChefHat
+    },
+    {
+      label: 'Listo para servir',
+      desc: isListo ? 'El personal está llevando el pedido a tu mesa' : 'El mesero llevará el pedido a tu mesa',
+      done: isListo,
+      current: isListo,
+      icon: Utensils
+    }
   ];
+
+  const tiempoEstimado = isListo ? '¡Listo para servir!' : isEnPreparacion ? '~8 - 12 min' : '~15 - 20 min';
 
   return (
     <div className="client-scroll-area">
@@ -78,7 +104,7 @@ export default function ClientOrderStatusPage({ onGoToMenu }) {
         <div style={{ marginTop: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
           <Clock size={18} color="#FCD9BD" />
           <span style={{ fontSize: '13px', color: '#FFF3EB' }}>
-            Tiempo estimado restante: <strong>~12 - 15 min</strong>
+            Tiempo estimado restante: <strong>{tiempoEstimado}</strong>
           </span>
         </div>
       </div>
@@ -122,25 +148,74 @@ export default function ClientOrderStatusPage({ onGoToMenu }) {
       </div>
 
       {/* Dishes in this order */}
-      <div style={{ background: '#FFFFFF', borderRadius: '18px', padding: '16px', border: '1px solid var(--c-cream-border)' }}>
+      <div style={{ background: '#FFFFFF', borderRadius: '18px', padding: '16px', border: '1px solid var(--c-cream-border)', marginBottom: '18px' }}>
         <h4 style={{ fontSize: '13px', fontWeight: 800, color: 'var(--c-burgundy-800)', marginBottom: '10px' }}>
           Platos solicitados:
         </h4>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-          {activeOrder.items.map((it, idx) => (
-            <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}>
-              <span>{it.quantity}x {it.product.nombre}</span>
-              <span style={{ fontWeight: 700, color: 'var(--c-burgundy-800)' }}>
-                {formatPrice(it.product.precio * it.quantity)}
-              </span>
+          {Array.isArray(activeOrder.items) && activeOrder.items.length > 0 ? (
+            activeOrder.items.map((it, idx) => {
+              const name = it.product?.nombre || it.nombre || 'Platillo';
+              const qty = it.quantity || it.cantidad || 1;
+              const price = Number(it.product?.precio ?? it.precio_unitario ?? it.precio ?? 0);
+              return (
+                <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}>
+                  <span>{qty}x {name}</span>
+                  <span style={{ fontWeight: 700, color: 'var(--c-burgundy-800)' }}>
+                    {formatPrice(price * qty)}
+                  </span>
+                </div>
+              );
+            })
+          ) : (
+            <div style={{ fontSize: '13px', color: '#6B7280', fontStyle: 'italic' }}>
+              Comanda enviada a cocina
             </div>
-          ))}
+          )}
           <div style={{ height: '1px', background: 'var(--c-cream-border)', margin: '6px 0' }} />
           <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '14px', fontWeight: 800, color: 'var(--c-burgundy-800)' }}>
             <span>Total comanda:</span>
-            <span>{formatPrice(activeOrder.total)}</span>
+            <span>{formatPrice(activeOrder.total || activeOrder.subtotal || 0)}</span>
           </div>
         </div>
+      </div>
+
+      {/* Botones de acción del cliente */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+        <button
+          onClick={onGoToMenu}
+          style={{
+            width: '100%',
+            background: 'var(--c-burgundy-800)',
+            color: 'white',
+            padding: '12px',
+            borderRadius: 'var(--radius-pill)',
+            fontWeight: 700,
+            fontSize: '14px',
+            border: 'none',
+            cursor: 'pointer',
+            boxShadow: '0 4px 14px rgba(92, 29, 36, 0.2)'
+          }}
+        >
+          ➕ Modificar / Agregar más platos
+        </button>
+
+        <button
+          onClick={resetActiveTable}
+          style={{
+            width: '100%',
+            background: 'transparent',
+            color: '#6B7280',
+            border: '1px solid #D1D5DB',
+            padding: '10px',
+            borderRadius: 'var(--radius-pill)',
+            fontWeight: 600,
+            fontSize: '13px',
+            cursor: 'pointer'
+          }}
+        >
+          🔄 Liberar mesa / Comenzar nuevo pedido
+        </button>
       </div>
     </div>
   );

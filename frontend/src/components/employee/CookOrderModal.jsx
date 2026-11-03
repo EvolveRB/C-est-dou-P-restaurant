@@ -1,20 +1,26 @@
 import { X, Clock, ChefHat, CheckCircle2, AlertCircle, Utensils } from 'lucide-react';
 import { formatPrice } from '../../data/initialProducts';
 
-export default function CookOrderModal({ table, onClose, onUpdateStatus }) {
-  if (!table || !table.pedido) return null;
+export default function CookOrderModal({ table, mesa, onClose, onUpdateStatus }) {
+  const activeTable = table || mesa;
+  if (!activeTable || !activeTable.pedido) return null;
 
-  const { id, estado, pedido } = table;
+  const { id, estado, pedido } = activeTable;
 
   const handleNextStatus = () => {
+    if (!onUpdateStatus) return;
     if (estado === 'Esperando') {
       onUpdateStatus(id, 'En preparación');
     } else if (estado === 'En preparación') {
-      onUpdateStatus(id, 'Enviado a mesa');
+      onUpdateStatus(id, 'Listo para servir');
+    } else if (estado === 'Listo para servir' || estado === 'Enviado a mesa') {
+      onUpdateStatus(id, 'Libre');
+      onClose();
     }
   };
 
   const handleFreeTable = () => {
+    if (!onUpdateStatus) return;
     onUpdateStatus(id, 'Libre');
     onClose();
   };
@@ -120,7 +126,7 @@ export default function CookOrderModal({ table, onClose, onUpdateStatus }) {
             }}>
               {estado === 'Esperando' && 'Esperando en cocina'}
               {estado === 'En preparación' && 'En preparación'}
-              {estado === 'Enviado a mesa' && 'Enviado a mesa'}
+              {(estado === 'Listo para servir' || estado === 'Enviado a mesa') && 'Listo para servir'}
             </span>
           </div>
 
@@ -131,58 +137,71 @@ export default function CookOrderModal({ table, onClose, onUpdateStatus }) {
             </h4>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-              {pedido.items.map((item, idx) => (
-                <div
-                  key={idx}
-                  style={{
-                    background: '#FAF5F0',
-                    border: '1px solid #EAE1D7',
-                    borderRadius: '12px',
-                    padding: '12px 14px',
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'flex-start'
-                  }}
-                >
-                  <div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <span style={{
-                        background: 'var(--c-burgundy-800)',
-                        color: 'white',
-                        fontWeight: 800,
-                        fontSize: '12px',
-                        padding: '2px 7px',
-                        borderRadius: '6px'
-                      }}>
-                        {item.quantity}x
-                      </span>
-                      <span style={{ fontWeight: 700, fontSize: '14.5px', color: '#1F242E' }}>
-                        {item.product.nombre}
+              {Array.isArray(pedido.items) && pedido.items.length > 0 ? (
+                pedido.items.map((item, idx) => {
+                  const name = item.product?.nombre || item.nombre || 'Platillo';
+                  const qty = item.quantity || item.cantidad || 1;
+                  const price = item.product?.precio ?? item.precio_unitario ?? item.precio ?? 0;
+                  const note = item.note || item.observaciones || '';
+
+                  return (
+                    <div
+                      key={idx}
+                      style={{
+                        background: '#FAF5F0',
+                        border: '1px solid #EAE1D7',
+                        borderRadius: '12px',
+                        padding: '12px 14px',
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'flex-start'
+                      }}
+                    >
+                      <div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <span style={{
+                            background: 'var(--c-burgundy-800)',
+                            color: 'white',
+                            fontWeight: 800,
+                            fontSize: '12px',
+                            padding: '2px 7px',
+                            borderRadius: '6px'
+                          }}>
+                            {qty}x
+                          </span>
+                          <span style={{ fontWeight: 700, fontSize: '14.5px', color: '#1F242E' }}>
+                            {name}
+                          </span>
+                        </div>
+
+                        {note && (
+                          <p style={{
+                            fontSize: '12px',
+                            color: 'var(--c-terracotta)',
+                            fontWeight: 600,
+                            marginTop: '4px',
+                            marginLeft: '32px',
+                            background: '#FFF5F0',
+                            padding: '2px 8px',
+                            borderRadius: '6px',
+                            display: 'inline-block'
+                          }}>
+                            Nota: "{note}"
+                          </p>
+                        )}
+                      </div>
+
+                      <span style={{ fontSize: '13.5px', fontWeight: 700, color: '#4B5563' }}>
+                        {formatPrice(price * qty)}
                       </span>
                     </div>
-
-                    {item.note && (
-                      <p style={{
-                        fontSize: '12px',
-                        color: 'var(--c-terracotta)',
-                        fontWeight: 600,
-                        marginTop: '4px',
-                        marginLeft: '32px',
-                        background: '#FFF5F0',
-                        padding: '2px 8px',
-                        borderRadius: '6px',
-                        display: 'inline-block'
-                      }}>
-                        Nota: "{item.note}"
-                      </p>
-                    )}
-                  </div>
-
-                  <span style={{ fontSize: '13.5px', fontWeight: 700, color: '#4B5563' }}>
-                    {formatPrice(item.product.precio * item.quantity)}
-                  </span>
+                  );
+                })
+              ) : (
+                <div style={{ padding: '14px', textAlign: 'center', color: '#6B7280', fontStyle: 'italic', background: '#FAF5F0', borderRadius: '12px' }}>
+                  Sin detalle de ítems registrados
                 </div>
-              ))}
+              )}
             </div>
           </div>
 
@@ -204,23 +223,19 @@ export default function CookOrderModal({ table, onClose, onUpdateStatus }) {
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '10px', borderTop: '1px solid #EEDBCE' }}>
             <span style={{ fontSize: '14px', fontWeight: 600, color: '#4B5563' }}>Total comanda</span>
             <span style={{ fontSize: '18px', fontWeight: 800, color: 'var(--c-burgundy-800)' }}>
-              {formatPrice(pedido.total)}
+              {formatPrice(pedido.total || pedido.subtotal || 0)}
             </span>
           </div>
         </div>
 
-        {/* Modal Footer: The requested "Acción principal" buttons */}
+        {/* Modal Footer */}
         <div style={{ padding: '16px 24px 22px', borderTop: '1px solid #F0E4D8', background: '#FAF5F0' }}>
-          <div style={{ fontSize: '12px', fontWeight: 700, color: '#6B7280', marginBottom: '8px' }}>
-            Acción principal
-          </div>
-
           {estado === 'Esperando' && (
             <button
               onClick={handleNextStatus}
               style={{
                 width: '100%',
-                background: '#D86B52', // Warm terracotta matching user image
+                background: '#D86B52', // Warm terracotta
                 color: '#FFFFFF',
                 borderRadius: '14px',
                 padding: '14px',
@@ -237,7 +252,7 @@ export default function CookOrderModal({ table, onClose, onUpdateStatus }) {
               }}
             >
               <ChefHat size={18} />
-              <span>cambio de estado (de esperando a en preparacion)</span>
+              <span>Pasar a En Preparación</span>
             </button>
           )}
 
@@ -263,11 +278,11 @@ export default function CookOrderModal({ table, onClose, onUpdateStatus }) {
               }}
             >
               <Utensils size={18} color="#4ADE80" />
-              <span>cambio de estado (de preparación a enviado a mesa)</span>
+              <span>Marcar como Listo para Servir</span>
             </button>
           )}
 
-          {estado === 'Enviado a mesa' && (
+          {(estado === 'Listo para servir' || estado === 'Enviado a mesa') && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
               <div style={{
                 background: '#DCFCE7',
@@ -278,18 +293,18 @@ export default function CookOrderModal({ table, onClose, onUpdateStatus }) {
                 fontWeight: 700,
                 fontSize: '13.5px'
               }}>
-                Pedido despachado y enviado a la mesa
+                🍽️ Pedido listo para llevar a la mesa
               </div>
               <button
                 onClick={handleFreeTable}
                 style={{
                   width: '100%',
-                  background: '#EAE1D7',
-                  color: '#4A443E',
+                  background: '#23272F',
+                  color: '#FFFFFF',
                   borderRadius: '12px',
-                  padding: '10px',
-                  fontSize: '13px',
-                  fontWeight: 600,
+                  padding: '12px',
+                  fontSize: '14px',
+                  fontWeight: 700,
                   border: 'none',
                   cursor: 'pointer'
                 }}
@@ -297,6 +312,26 @@ export default function CookOrderModal({ table, onClose, onUpdateStatus }) {
                 Completar y liberar mesa
               </button>
             </div>
+          )}
+
+          {/* Botón secundario para liberar la mesa en cualquier momento */}
+          {estado !== 'Listo para servir' && estado !== 'Enviado a mesa' && (
+            <button
+              onClick={handleFreeTable}
+              style={{
+                marginTop: '10px',
+                width: '100%',
+                background: 'transparent',
+                color: '#6B7280',
+                border: 'none',
+                fontSize: '12.5px',
+                fontWeight: 600,
+                cursor: 'pointer',
+                textDecoration: 'underline'
+              }}
+            >
+              Liberar mesa y cancelar pedido
+            </button>
           )}
         </div>
       </div>

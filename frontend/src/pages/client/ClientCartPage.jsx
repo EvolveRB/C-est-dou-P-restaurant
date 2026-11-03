@@ -3,10 +3,10 @@ import { useCart } from '../../context/CartContext';
 import { formatPrice } from '../../data/initialProducts';
 
 export default function ClientCartPage({ onGoToMenu, onOrderSuccess }) {
-  const { cart, updateQuantity, removeFromCart, totalPrice, totalItems, sendOrder, tableNumber } = useCart();
+  const { cart, updateQuantity, removeFromCart, totalPrice, totalItems, sendOrder, tableNumber, sendingOrder } = useCart();
 
-  const handleSend = () => {
-    const order = sendOrder();
+  const handleSend = async () => {
+    const order = await sendOrder();
     if (order) {
       onOrderSuccess();
     }
@@ -68,65 +68,72 @@ export default function ClientCartPage({ onGoToMenu, onOrderSuccess }) {
 
       {/* Cart item list */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-        {cart.map((item) => (
-          <div
-            key={item.product.id}
-            style={{
-              background: '#FFFFFF',
-              borderRadius: '16px',
-              padding: '12px 14px',
-              border: '1px solid var(--c-cream-border)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              gap: '12px'
-            }}
-          >
-            <div style={{ flex: 1 }}>
-              <h3 style={{ fontSize: '13.5px', fontWeight: 700, color: 'var(--c-burgundy-800)' }}>
-                {item.product.nombre}
-              </h3>
-              {item.note && (
-                <p style={{ fontSize: '11px', color: 'var(--c-terracotta)', fontStyle: 'italic', marginTop: '2px' }}>
-                  "{item.note}"
-                </p>
-              )}
-              <div style={{ fontSize: '13px', fontWeight: 800, color: 'var(--c-text-main)', marginTop: '4px' }}>
-                {formatPrice(item.product.precio * item.quantity)}
-              </div>
-            </div>
+        {cart.map((item, idx) => {
+          const prodId = item.product?.id ?? item.id ?? idx;
+          const prodName = item.product?.nombre || item.nombre || 'Platillo';
+          const prodPrice = Number(item.product?.precio ?? item.precio ?? 0);
+          const qty = item.quantity || 1;
 
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', background: 'var(--c-cream-bg)', borderRadius: 'var(--radius-pill)', padding: '3px 8px', border: '1px solid var(--c-cream-border)', gap: '8px' }}>
-                <button
-                  onClick={() => updateQuantity(item.product.id, -1)}
-                  style={{ display: 'flex', alignItems: 'center', color: 'var(--c-burgundy-800)' }}
-                  aria-label="Restar 1"
-                >
-                  <Minus size={13} />
-                </button>
-                <span style={{ fontSize: '13px', fontWeight: 800, minWidth: '14px', textAlign: 'center' }}>
-                  {item.quantity}
-                </span>
-                <button
-                  onClick={() => updateQuantity(item.product.id, 1)}
-                  style={{ display: 'flex', alignItems: 'center', color: 'var(--c-burgundy-800)' }}
-                  aria-label="Sumar 1"
-                >
-                  <Plus size={13} />
-                </button>
+          return (
+            <div
+              key={prodId}
+              style={{
+                background: '#FFFFFF',
+                borderRadius: '16px',
+                padding: '12px 14px',
+                border: '1px solid var(--c-cream-border)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: '12px'
+              }}
+            >
+              <div style={{ flex: 1 }}>
+                <h3 style={{ fontSize: '13.5px', fontWeight: 700, color: 'var(--c-burgundy-800)' }}>
+                  {prodName}
+                </h3>
+                {item.note && (
+                  <p style={{ fontSize: '11px', color: 'var(--c-terracotta)', fontStyle: 'italic', marginTop: '2px' }}>
+                    "{item.note}"
+                  </p>
+                )}
+                <div style={{ fontSize: '13px', fontWeight: 800, color: 'var(--c-text-main)', marginTop: '4px' }}>
+                  {formatPrice(prodPrice * qty)}
+                </div>
               </div>
 
-              <button
-                onClick={() => removeFromCart(item.product.id)}
-                style={{ color: '#E53E3E', padding: '4px', display: 'flex' }}
-                aria-label="Eliminar producto"
-              >
-                <Trash2 size={16} />
-              </button>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', background: 'var(--c-cream-bg)', borderRadius: 'var(--radius-pill)', padding: '3px 8px', border: '1px solid var(--c-cream-border)', gap: '8px' }}>
+                  <button
+                    onClick={() => updateQuantity(prodId, -1)}
+                    style={{ display: 'flex', alignItems: 'center', color: 'var(--c-burgundy-800)' }}
+                    aria-label="Restar 1"
+                  >
+                    <Minus size={13} />
+                  </button>
+                  <span style={{ fontSize: '13px', fontWeight: 800, minWidth: '14px', textAlign: 'center' }}>
+                    {qty}
+                  </span>
+                  <button
+                    onClick={() => updateQuantity(prodId, 1)}
+                    style={{ display: 'flex', alignItems: 'center', color: 'var(--c-burgundy-800)' }}
+                    aria-label="Sumar 1"
+                  >
+                    <Plus size={13} />
+                  </button>
+                </div>
+
+                <button
+                  onClick={() => removeFromCart(prodId)}
+                  style={{ color: '#E53E3E', padding: '4px', display: 'flex' }}
+                  aria-label="Eliminar producto"
+                >
+                  <Trash2 size={16} />
+                </button>
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       {/* Bill summary card */}
@@ -149,6 +156,7 @@ export default function ClientCartPage({ onGoToMenu, onOrderSuccess }) {
       {/* Submit Button */}
       <button
         onClick={handleSend}
+        disabled={sendingOrder}
         style={{
           width: '100%',
           background: 'var(--c-burgundy-800)',
@@ -162,10 +170,12 @@ export default function ClientCartPage({ onGoToMenu, onOrderSuccess }) {
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          gap: '8px'
+          gap: '8px',
+          opacity: sendingOrder ? 0.75 : 1,
+          cursor: sendingOrder ? 'wait' : 'pointer'
         }}
       >
-        <span>Enviar Pedido a Cocina • Mesa {tableNumber}</span>
+        <span>{sendingOrder ? 'Enviando comanda a cocina...' : `Enviar Pedido a Cocina • Mesa ${tableNumber}`}</span>
       </button>
     </div>
   );

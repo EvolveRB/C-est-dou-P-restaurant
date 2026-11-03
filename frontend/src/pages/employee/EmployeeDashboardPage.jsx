@@ -58,11 +58,6 @@ export default function EmployeeDashboardPage() {
             <h1 style={{ fontSize: '32px', fontWeight: 800, color: '#14171F', lineHeight: 1.15 }}>
               {activeTab === 'pedidos' ? 'Pedidos' : 'Inventario'}
             </h1>
-            <p style={{ fontSize: '14.5px', color: '#6B7280', marginTop: '4px' }}>
-              {activeTab === 'pedidos'
-                ? 'Vista del cocinero para preparar y cambiar el estado de las mesas.'
-                : 'Revisión productos y gestión de carta de platos.'}
-            </p>
           </div>
 
           {/* Selector de pestañas */}
@@ -129,9 +124,6 @@ export default function EmployeeDashboardPage() {
                   <h2 style={{ fontSize: '22px', fontWeight: 800, color: '#1F242E' }}>
                     Carta de elaboración
                   </h2>
-                  <p style={{ fontSize: '14px', color: '#6B7280', marginTop: '2px' }}>
-                    Prioridad y seguimiento en cocina
-                  </p>
                 </div>
                 <span style={{
                   backgroundColor: '#F3DBD2',
@@ -185,12 +177,12 @@ export default function EmployeeDashboardPage() {
                         <span style={{
                           fontSize: '12px',
                           fontWeight: 700,
-                          backgroundColor: mesa.estado === 'Esperando' ? '#FEF3C7' : '#FEE2E2',
-                          color: mesa.estado === 'Esperando' ? '#B45309' : '#B91C1C',
+                          backgroundColor: mesa.estado === 'Esperando' ? '#FEF3C7' : (mesa.estado === 'Listo para servir' || mesa.estado === 'Listo') ? '#DCFCE7' : '#FEE2E2',
+                          color: mesa.estado === 'Esperando' ? '#B45309' : (mesa.estado === 'Listo para servir' || mesa.estado === 'Listo') ? '#15803D' : '#B91C1C',
                           padding: '3px 10px',
                           borderRadius: '8px'
                         }}>
-                          {mesa.estado === 'Esperando' ? 'Esperando comanda' : 'En preparación'}
+                          {mesa.estado === 'Esperando' ? 'Esperando comanda' : (mesa.estado === 'Listo para servir' || mesa.estado === 'Listo') ? '🍽️ Listo para servir' : 'En preparación'}
                         </span>
                       ) : (
                         <span style={{
@@ -232,9 +224,6 @@ export default function EmployeeDashboardPage() {
                   <h2 style={{ fontSize: '20px', fontWeight: 800, color: '#1F242E' }}>
                     Inventario
                   </h2>
-                  <p style={{ fontSize: '13px', color: '#6B7280', marginTop: '2px' }}>
-                    Elementos pendientes de configuración
-                  </p>
                 </div>
                 <span style={{
                   backgroundColor: '#F3DBD2',
@@ -345,9 +334,6 @@ export default function EmployeeDashboardPage() {
                   <h2 style={{ fontSize: '20px', fontWeight: 800, color: '#1F242E' }}>
                     Carta de elaboración
                   </h2>
-                  <p style={{ fontSize: '13px', color: '#6B7280', marginTop: '2px' }}>
-                    Prioridad y seguimiento en cocina
-                  </p>
                 </div>
                 <span style={{
                   backgroundColor: '#F3DBD2',

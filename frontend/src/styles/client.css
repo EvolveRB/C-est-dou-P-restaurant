@@ -389,6 +389,7 @@
   align-items: center;
   gap: 8px;
   white-space: nowrap;
+  pointer-events: none;
 }
 
 /* Modal Bottom Sheet for Product Detail */

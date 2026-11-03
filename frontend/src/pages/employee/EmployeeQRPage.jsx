@@ -114,27 +114,25 @@ export default function EmployeeQRPage() {
                 <Minus size={16} strokeWidth={2.5} />
               </button>
 
-              <input
-                type="number"
-                min="1"
-                max="50"
-                value={inputValue}
-                onChange={handleInputChange}
-                onBlur={handleInputBlur}
+              <span
                 style={{
-                  width: '48px',
+                  minWidth: '42px',
                   height: '32px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
                   background: '#FFFFFF',
                   border: '1px solid #CBD5E1',
                   color: '#1E293B',
                   borderRadius: '8px',
-                  textAlign: 'center',
-                  fontSize: '14px',
-                  fontWeight: 700,
-                  outline: 'none',
-                  MozAppearance: 'textfield'
+                  fontSize: '15px',
+                  fontWeight: 800,
+                  userSelect: 'none',
+                  padding: '0 6px'
                 }}
-              />
+              >
+                {tables.length}
+              </span>
 
               <button
                 type="button"

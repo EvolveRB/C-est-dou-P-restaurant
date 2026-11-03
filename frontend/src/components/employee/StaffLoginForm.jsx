@@ -14,7 +14,10 @@ export default function StaffLoginForm() {
       return;
     }
     setError('');
-    await login(username, password);
+    const res = await login(username, password);
+    if (!res?.success) {
+      setError(res?.error || 'Usuario o contraseña incorrectos');
+    }
   };
 
   return (
@@ -67,10 +70,7 @@ export default function StaffLoginForm() {
             </div>
           )}
 
-          <div style={{ marginTop: '12px' }}>
-            <div className="login-action-caption">
-              Acción principal
-            </div>
+          <div style={{ marginTop: '16px' }}>
             <button
               type="submit"
               className="login-submit-btn"
@@ -78,6 +78,63 @@ export default function StaffLoginForm() {
             >
               {loading ? 'Iniciando sesión...' : 'Iniciar sesión'}
             </button>
+          </div>
+
+          {/* Accesos rápidos de prueba */}
+          <div style={{ marginTop: '20px', paddingTop: '16px', borderTop: '1px dashed #E5D8CC' }}>
+            <div style={{ fontSize: '11.5px', color: '#6B7280', marginBottom: '8px', fontWeight: 600, textAlign: 'center' }}>
+              Credenciales de acceso rápido (Roles):
+            </div>
+            <div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
+              <button
+                type="button"
+                onClick={() => { setUsername('admin@restaurant.cl'); setPassword('admin123'); setError(''); }}
+                style={{
+                  fontSize: '11.5px',
+                  fontWeight: 600,
+                  padding: '6px 10px',
+                  borderRadius: '8px',
+                  border: '1px solid #CBD5E1',
+                  background: '#F8FAFC',
+                  cursor: 'pointer',
+                  color: '#334155'
+                }}
+              >
+                👑 Admin
+              </button>
+              <button
+                type="button"
+                onClick={() => { setUsername('cocinero'); setPassword('cocina123'); setError(''); }}
+                style={{
+                  fontSize: '11.5px',
+                  fontWeight: 600,
+                  padding: '6px 10px',
+                  borderRadius: '8px',
+                  border: '1px solid #CBD5E1',
+                  background: '#F8FAFC',
+                  cursor: 'pointer',
+                  color: '#334155'
+                }}
+              >
+                🍳 Cocina
+              </button>
+              <button
+                type="button"
+                onClick={() => { setUsername('garzon'); setPassword('garzon123'); setError(''); }}
+                style={{
+                  fontSize: '11.5px',
+                  fontWeight: 600,
+                  padding: '6px 10px',
+                  borderRadius: '8px',
+                  border: '1px solid #CBD5E1',
+                  background: '#F8FAFC',
+                  cursor: 'pointer',
+                  color: '#334155'
+                }}
+              >
+                📋 Garzón
+              </button>
+            </div>
           </div>
         </form>
       </div>

@@ -19,7 +19,11 @@ if not MONGO_URI:
 
 # El cliente se crea una sola vez al arrancar la aplicación (patrón singleton).
 # Motor es thread-safe y gestiona el connection pool internamente.
-cliente_mongo = AsyncIOMotorClient(MONGO_URI)
+# serverSelectionTimeoutMS=5000 evita que FastAPI quede congelado 30 segundos si la IP está bloqueada.
+cliente_mongo = AsyncIOMotorClient(
+    MONGO_URI,
+    serverSelectionTimeoutMS=5000
+)
 
 # Base de datos del restaurante dentro del cluster
 restaurante_db = cliente_mongo["restaurante_db"]

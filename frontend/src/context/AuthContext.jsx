@@ -166,10 +166,10 @@ function mapCargoToRole(cargo, username = '') {
   if (c.includes('cocin') || c.includes('chef') || u.includes('coci') || u === 'chef') {
     return 'Cocina';
   }
-  if (c.includes('mesero') || c.includes('cajero') || c.includes('mozo')) {
-    return 'Mesero';
+  if (c.includes('mesero') || c.includes('cajero') || c.includes('mozo') || c.includes('garzon') || c.includes('garzón') || u.includes('garzon') || u.includes('mesero')) {
+    return 'Garzón';
   }
-  return 'Mesero'; // Rol por defecto
+  return 'Garzón'; // Rol por defecto
 }
 
 function capitalize(str) {
