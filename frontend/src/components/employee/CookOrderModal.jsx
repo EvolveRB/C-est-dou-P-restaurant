@@ -143,6 +143,7 @@ export default function CookOrderModal({ table, mesa, onClose, onUpdateStatus })
                   const qty = item.quantity || item.cantidad || 1;
                   const price = item.product?.precio ?? item.precio_unitario ?? item.precio ?? 0;
                   const note = item.note || item.observaciones || '';
+                  const itemImg = item.product?.imagen || item.imagen;
 
                   return (
                     <div
@@ -154,44 +155,69 @@ export default function CookOrderModal({ table, mesa, onClose, onUpdateStatus })
                         padding: '12px 14px',
                         display: 'flex',
                         justifyContent: 'space-between',
-                        alignItems: 'flex-start'
+                        alignItems: 'center',
+                        gap: '12px'
                       }}
                     >
-                      <div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          <span style={{
-                            background: 'var(--c-burgundy-800)',
-                            color: 'white',
-                            fontWeight: 800,
-                            fontSize: '12px',
-                            padding: '2px 7px',
-                            borderRadius: '6px'
-                          }}>
-                            {qty}x
-                          </span>
-                          <span style={{ fontWeight: 700, fontSize: '14.5px', color: '#1F242E' }}>
-                            {name}
-                          </span>
-                        </div>
-
-                        {note && (
-                          <p style={{
-                            fontSize: '12px',
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flex: 1 }}>
+                        {/* Vista Cocina: Renderizado condicional sin placeholders falsos */}
+                        {itemImg ? (
+                          <img
+                            src={itemImg}
+                            alt={name}
+                            style={{ width: '40px', height: '40px', borderRadius: '8px', objectFit: 'cover' }}
+                          />
+                        ) : (
+                          <div style={{
+                            width: '36px',
+                            height: '36px',
+                            borderRadius: '8px',
+                            backgroundColor: '#F3EAE1',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
                             color: 'var(--c-terracotta)',
-                            fontWeight: 600,
-                            marginTop: '4px',
-                            marginLeft: '32px',
-                            background: '#FFF5F0',
-                            padding: '2px 8px',
-                            borderRadius: '6px',
-                            display: 'inline-block'
+                            flexShrink: 0
                           }}>
-                            Nota: "{note}"
-                          </p>
+                            <Utensils size={18} />
+                          </div>
                         )}
+
+                        <div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <span style={{
+                              background: 'var(--c-burgundy-800)',
+                              color: 'white',
+                              fontWeight: 800,
+                              fontSize: '12px',
+                              padding: '2px 7px',
+                              borderRadius: '6px'
+                            }}>
+                              {qty}x
+                            </span>
+                            <span style={{ fontWeight: 700, fontSize: '14.5px', color: '#1F242E' }}>
+                              {name}
+                            </span>
+                          </div>
+
+                          {note && (
+                            <p style={{
+                              fontSize: '12px',
+                              color: 'var(--c-terracotta)',
+                              fontWeight: 600,
+                              marginTop: '4px',
+                              background: '#FFF5F0',
+                              padding: '2px 8px',
+                              borderRadius: '6px',
+                              display: 'inline-block'
+                            }}>
+                              Nota: "{note}"
+                            </p>
+                          )}
+                        </div>
                       </div>
 
-                      <span style={{ fontSize: '13.5px', fontWeight: 700, color: '#4B5563' }}>
+                      <span style={{ fontSize: '13.5px', fontWeight: 700, color: '#4B5563', whiteSpace: 'nowrap' }}>
                         {formatPrice(price * qty)}
                       </span>
                     </div>
@@ -228,27 +254,17 @@ export default function CookOrderModal({ table, mesa, onClose, onUpdateStatus })
           </div>
         </div>
 
-        {/* Modal Footer */}
+        {/* Modal Footer: Botones con estilo y paleta unificada (Borgoña) */}
         <div style={{ padding: '16px 24px 22px', borderTop: '1px solid #F0E4D8', background: '#FAF5F0' }}>
           {estado === 'Esperando' && (
             <button
               onClick={handleNextStatus}
+              className="btn-primary"
               style={{
                 width: '100%',
-                background: '#D86B52', // Warm terracotta
-                color: '#FFFFFF',
                 borderRadius: '14px',
                 padding: '14px',
-                fontSize: '14.5px',
-                fontWeight: 700,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '8px',
-                border: 'none',
-                cursor: 'pointer',
-                boxShadow: '0 4px 14px rgba(216, 107, 82, 0.35)',
-                transition: 'all 0.15s ease'
+                fontSize: '14.5px'
               }}
             >
               <ChefHat size={18} />
@@ -259,25 +275,15 @@ export default function CookOrderModal({ table, mesa, onClose, onUpdateStatus })
           {estado === 'En preparación' && (
             <button
               onClick={handleNextStatus}
+              className="btn-primary"
               style={{
                 width: '100%',
-                background: '#23272F',
-                color: '#FFFFFF',
                 borderRadius: '14px',
                 padding: '14px',
-                fontSize: '14.5px',
-                fontWeight: 700,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '8px',
-                border: 'none',
-                cursor: 'pointer',
-                boxShadow: '0 4px 14px rgba(35, 39, 47, 0.25)',
-                transition: 'all 0.15s ease'
+                fontSize: '14.5px'
               }}
             >
-              <Utensils size={18} color="#4ADE80" />
+              <Utensils size={18} />
               <span>Marcar como Listo para Servir</span>
             </button>
           )}
@@ -297,16 +303,12 @@ export default function CookOrderModal({ table, mesa, onClose, onUpdateStatus })
               </div>
               <button
                 onClick={handleFreeTable}
+                className="btn-primary"
                 style={{
                   width: '100%',
-                  background: '#23272F',
-                  color: '#FFFFFF',
                   borderRadius: '12px',
                   padding: '12px',
-                  fontSize: '14px',
-                  fontWeight: 700,
-                  border: 'none',
-                  cursor: 'pointer'
+                  fontSize: '14px'
                 }}
               >
                 Completar y liberar mesa
@@ -314,7 +316,7 @@ export default function CookOrderModal({ table, mesa, onClose, onUpdateStatus })
             </div>
           )}
 
-          {/* Botón secundario para liberar la mesa en cualquier momento */}
+          {/* Botón secundario para liberar la mesa */}
           {estado !== 'Listo para servir' && estado !== 'Enviado a mesa' && (
             <button
               onClick={handleFreeTable}

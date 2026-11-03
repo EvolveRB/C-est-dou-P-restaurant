@@ -1,9 +1,13 @@
-import { Clock, ChefHat, CheckCircle2, Utensils, AlertCircle } from 'lucide-react';
+import { Clock, ChefHat, CheckCircle2, Utensils, BellRing, RefreshCw } from 'lucide-react';
 import { useCart } from '../../context/CartContext';
 import { formatPrice } from '../../data/initialProducts';
 
 export default function ClientOrderStatusPage({ onGoToMenu }) {
-  const { activeOrder, tableNumber, resetActiveTable } = useCart();
+  const { activeOrder, tableNumber, resetActiveTable, solicitarGarzon, callingWaiter } = useCart();
+
+  const handleLlamarGarzon = () => {
+    solicitarGarzon('Consulta sobre el pedido / Servicio');
+  };
 
   if (!activeOrder) {
     return (
@@ -27,21 +31,25 @@ export default function ClientOrderStatusPage({ onGoToMenu }) {
         <p style={{ fontSize: '13px', color: 'var(--c-text-muted)', maxWidth: '240px', marginBottom: '22px' }}>
           Aún no has solicitado platos para la Mesa {tableNumber}. Tu comanda aparecerá aquí una vez enviada.
         </p>
-        <button
-          onClick={onGoToMenu}
-          style={{
-            background: 'var(--c-burgundy-800)',
-            color: 'white',
-            padding: '11px 22px',
-            borderRadius: 'var(--radius-pill)',
-            fontWeight: 700,
-            fontSize: '13.5px',
-            border: 'none',
-            cursor: 'pointer'
-          }}
-        >
-          Ver Menú
-        </button>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', width: '100%', maxWidth: '240px' }}>
+          <button
+            onClick={onGoToMenu}
+            className="btn-primary"
+            style={{ borderRadius: 'var(--radius-pill)', padding: '11px 22px' }}
+          >
+            Ver Menú
+          </button>
+          <button
+            onClick={handleLlamarGarzon}
+            disabled={callingWaiter}
+            className="btn-secondary"
+            style={{ borderRadius: 'var(--radius-pill)', fontSize: '13px' }}
+          >
+            <BellRing size={15} />
+            <span>{callingWaiter ? 'Llamando...' : 'Llamar Garzón'}</span>
+          </button>
+        </div>
       </div>
     );
   }
@@ -180,24 +188,25 @@ export default function ClientOrderStatusPage({ onGoToMenu }) {
         </div>
       </div>
 
-      {/* Botones de acción del cliente */}
+      {/* Botones de acción del cliente con estilos unificados */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
         <button
           onClick={onGoToMenu}
-          style={{
-            width: '100%',
-            background: 'var(--c-burgundy-800)',
-            color: 'white',
-            padding: '12px',
-            borderRadius: 'var(--radius-pill)',
-            fontWeight: 700,
-            fontSize: '14px',
-            border: 'none',
-            cursor: 'pointer',
-            boxShadow: '0 4px 14px rgba(92, 29, 36, 0.2)'
-          }}
+          className="btn-primary"
+          style={{ width: '100%', borderRadius: 'var(--radius-pill)', padding: '12px', fontSize: '14px' }}
         >
           ➕ Modificar / Agregar más platos
+        </button>
+
+        {/* RF-08: Llamar al Garzón con estilo secundario unificado */}
+        <button
+          onClick={handleLlamarGarzon}
+          disabled={callingWaiter}
+          className="btn-secondary"
+          style={{ width: '100%', borderRadius: 'var(--radius-pill)', padding: '11px', fontSize: '13.5px' }}
+        >
+          <BellRing size={16} />
+          <span>{callingWaiter ? 'Notificando al Garzón...' : 'Llamar al Garzón'}</span>
         </button>
 
         <button
@@ -211,10 +220,15 @@ export default function ClientOrderStatusPage({ onGoToMenu }) {
             borderRadius: 'var(--radius-pill)',
             fontWeight: 600,
             fontSize: '13px',
-            cursor: 'pointer'
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '6px'
           }}
         >
-          🔄 Liberar mesa / Comenzar nuevo pedido
+          <RefreshCw size={14} />
+          <span>Liberar mesa / Comenzar nuevo pedido</span>
         </button>
       </div>
     </div>

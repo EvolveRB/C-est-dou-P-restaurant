@@ -6,10 +6,10 @@ import { useCart } from '../../context/CartContext';
 export default function ProductCard({ product, onOpenDetail }) {
   const { addToCart } = useCart();
   const isAvailable = product.disponible !== false;
+  const etiquetas = Array.isArray(product.etiquetas) ? product.etiquetas : [];
 
   const handleQuickAdd = (e) => {
     e.stopPropagation();
-    if (!isAvailable) return;
     addToCart(product, 1);
   };
 
@@ -19,7 +19,7 @@ export default function ProductCard({ product, onOpenDetail }) {
       onClick={() => onOpenDetail(product)}
       style={{
         opacity: isAvailable ? 1 : 0.65,
-        cursor: isAvailable ? 'pointer' : 'not-allowed'
+        cursor: 'pointer'
       }}
     >
       <div className="product-image-container">
@@ -44,7 +44,15 @@ export default function ProductCard({ product, onOpenDetail }) {
             Agotado
           </span>
         )}
-        <PlaceholderIcon />
+        {product.imagen ? (
+          <img
+            src={product.imagen}
+            alt={product.nombre}
+            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+          />
+        ) : (
+          <PlaceholderIcon />
+        )}
       </div>
 
       <div className="product-details">
@@ -53,18 +61,28 @@ export default function ProductCard({ product, onOpenDetail }) {
         </h2>
         <p className="product-description">{product.descripcion}</p>
 
+        {/* RF-05: Badges visuales de etiquetas (ej. 'Vegetariano', 'Sin Gluten') */}
+        {etiquetas.length > 0 && (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', margin: '4px 0 2px' }}>
+            {etiquetas.slice(0, 2).map((tag, idx) => (
+              <span key={idx} className="badge-tag">
+                {tag}
+              </span>
+            ))}
+          </div>
+        )}
+
         <div className="product-price-row">
           <span className="product-price">{formatPrice(product.precio)}</span>
           <button
             className="product-add-mini-btn"
             onClick={handleQuickAdd}
-            disabled={!isAvailable}
             style={{
-              backgroundColor: isAvailable ? 'var(--c-terracotta-light)' : '#F3F4F6',
-              color: isAvailable ? 'var(--c-terracotta)' : '#9CA3AF',
-              cursor: isAvailable ? 'pointer' : 'not-allowed'
+              backgroundColor: isAvailable ? 'var(--c-terracotta-light)' : '#FEE2E2',
+              color: isAvailable ? 'var(--c-terracotta)' : '#DC2626',
+              cursor: 'pointer'
             }}
-            title={isAvailable ? 'Agregar al pedido' : 'Plato no disponible'}
+            title={isAvailable ? 'Agregar al pedido' : 'Plato agotado'}
             aria-label={`Agregar ${product.nombre}`}
           >
             {isAvailable ? <Plus size={15} strokeWidth={3} /> : <Ban size={13} />}
