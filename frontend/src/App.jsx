@@ -4,7 +4,7 @@ import { RestaurantProvider } from './context/RestaurantContext';
 import { CartProvider } from './context/CartContext';
 import EmployeeLayout from './layouts/EmployeeLayout';
 import ClientLayout from './layouts/ClientLayout';
-import EmployeeDashboardPage from './pages/employee/EmployeeDashboardPage';
+import RoleBasedDashboard from './pages/employee/RoleBasedDashboard';
 import EmployeeQRPage from './pages/employee/EmployeeQRPage';
 
 export default function App() {
@@ -24,12 +24,12 @@ export default function App() {
               <Route path="/cliente" element={<Navigate to="/mesa/1" replace />} />
 
               {/* ========================================================
-                  2. VISTA PRINCIPAL: EMPLEADOS Y COCINA
-                  Ajustada para PC, Tablet y móvil. Siempre inicia solicitando
-                  el inicio de sesión centrado al medio si no está autenticado.
+                  2. VISTA PRINCIPAL: EMPLEADOS Y PERSONAL
+                  Ajustada por rol: Administrador (vacía), Garzón (solo mesas)
+                  y Cocina (pedidos e inventario).
                  ======================================================== */}
               <Route path="/" element={<EmployeeLayout />}>
-                <Route index element={<EmployeeDashboardPage />} />
+                <Route index element={<RoleBasedDashboard />} />
                 <Route path="staff/qrs" element={<EmployeeQRPage />} />
                 <Route path="admin/qrs" element={<EmployeeQRPage />} />
               </Route>

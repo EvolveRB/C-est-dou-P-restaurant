@@ -20,29 +20,65 @@ const RestaurantContext = createContext(null);
  * Las mesas sin pedido activo se incluyen como 'Libre'.
  */
 function normalizeMesas(pedidosBackend, totalMesas = 8) {
-  // Mapa de num_mesa → último pedido activo
+  // Mapa de num_mesa (entero) → último pedido activo
   const pedidosPorMesa = {};
   for (const p of pedidosBackend) {
     if (p.num_mesa != null) {
-      pedidosPorMesa[p.num_mesa] = p;
+      const num = parseInt(p.num_mesa, 10);
+      if (!isNaN(num)) {
+        pedidosPorMesa[num] = p;
+      }
     }
   }
 
   return Array.from({ length: totalMesas }, (_, i) => {
     const num = i + 1;
     const pedido = pedidosPorMesa[num];
-    if (!pedido) return { id: num, estado: 'Libre', pedido: null };
+    if (!pedido || pedido.estado_pedido === 'Entregado' || pedido.estado_pedido === 'Libre' || pedido.estado_pedido === 'Archivado') {
+      return { id: num, estado: 'Libre', pedido: null };
+    }
 
     const estadoUI = mapEstadoBackendToUI(pedido.estado_pedido);
+
+    const rawItems = Array.isArray(pedido.items) ? pedido.items : [];
+    const normalizedItems = rawItems.map((it) => {
+      const prodName = it.product?.nombre || it.nombre || it.name || 'Platillo';
+      const prodPrice = Number(it.product?.precio ?? it.precio_unitario ?? it.precio ?? 0);
+      const prodId = it.product?.id || it.producto_id || it.id || it._id || 'item';
+      const qty = Math.max(1, parseInt(it.quantity ?? it.cantidad ?? 1, 10));
+      const note = it.note || it.observaciones || it.notas || '';
+      return {
+        product: {
+          id: prodId,
+          nombre: prodName,
+          precio: prodPrice
+        },
+        quantity: qty,
+        note: note,
+        // Propiedades planas para máxima compatibilidad con cualquier vista
+        nombre: prodName,
+        precio: prodPrice,
+        precio_unitario: prodPrice,
+        cantidad: qty,
+        observaciones: note
+      };
+    });
+
+    const totalCalculado = normalizedItems.reduce(
+      (acc, item) => acc + (item.product.precio * item.quantity),
+      0
+    );
+
     return {
       id: num,
       estado: estadoUI,
       pedido: {
         id: String(pedido._id ?? pedido.id_pedido ?? `PED-${num}`),
         hora: pedido.hora_pedido ?? '--:--',
-        items: [],          // Los detalles de items vienen de otro endpoint
-        total: 0,
-        notas: ''
+        items: normalizedItems,
+        total: pedido.total || pedido.subtotal || totalCalculado,
+        subtotal: pedido.subtotal || pedido.total || totalCalculado,
+        notas: pedido.notas || ''
       }
     };
   });
@@ -76,24 +112,34 @@ function mapEstadoUIToBackend(estadoUI) {
 }
 
 /**
+ * Determina de forma robusta si un producto está disponible en inventario.
+ */
+function isProductAvailable(p) {
+  if (p.disponible === false || p.disponible === 0 || p.disponible === 'false' || p.disponible === '0') {
+    return false;
+  }
+  if (p.disponibilidad != null) {
+    const dispStr = String(p.disponibilidad).trim().toLowerCase();
+    if (dispStr === 'agotado' || dispStr === 'no disponible' || dispStr === 'false' || dispStr === '0') {
+      return false;
+    }
+    return true;
+  }
+  return true;
+}
+
+/**
  * Convierte un producto del backend al shape que usa la UI.
- *
- * Con MongoDB el backend retorna { _id (ObjectId→string), nombre, precio,
- * disponibilidad, categoria, descripcion, tiempo_preparacion, imagen }.
- * El campo `id` que usa toda la UI queda como el string del ObjectId,
- * para que PATCH /productos/{id}/disponible reciba el valor correcto.
  */
 function normalizeProducto(p) {
   return {
-    // MongoDB devuelve _id como string (ya serializado en el backend con serializar_doc).
-    // Fallback a id_plato (SQL legacy) o id genérico para compatibilidad.
     id: p._id ?? p.id_plato ?? p.id,
     nombre: p.nombre,
     categoria: (p.categoria ?? 'otros').toLowerCase(),
-    precio: p.precio,
+    precio: Number(p.precio ?? 0),
     descripcion: p.descripcion ?? '',
     tiempo: p.tiempo_preparacion ?? p.tiempo ?? 0,
-    disponible: p.disponible ?? (p.disponibilidad === 'En stock'),
+    disponible: isProductAvailable(p),
     imagen: p.imagen ?? null,
     destacado: p.destacado ?? false
   };
@@ -157,7 +203,30 @@ export function RestaurantProvider({ children }) {
   useEffect(() => {
     fetchTables();
     fetchProducts();
+
+    // Sincronización en tiempo real: consulta mesas cada 2.5s
+    const interval = setInterval(() => {
+      fetchTables();
+    }, 2500);
+
+    return () => clearInterval(interval);
   }, [fetchTables, fetchProducts]);
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // resetTable — POST /mesas/{num}/liberar
+  // ──────────────────────────────────────────────────────────────────────────
+  const resetTable = async (tableNumber) => {
+    const num = parseInt(tableNumber, 10);
+    setTables((prev) =>
+      prev.map((t) => (t.id === num ? { ...t, estado: 'Libre', pedido: null } : t))
+    );
+    try {
+      await fetch(`${API_URL}/mesas/${num}/liberar`, { method: 'POST' });
+      await fetchTables();
+    } catch (err) {
+      console.warn('Error al liberar mesa:', err);
+    }
+  };
 
   // ──────────────────────────────────────────────────────────────────────────
   // submitOrderForTable — POST /pedidos
@@ -175,22 +244,22 @@ export function RestaurantProvider({ children }) {
     const num_mesa = parseInt(tableNumber, 10);
     const horaActual = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
-    // Body actualizado al nuevo schema MongoDB de PedidoCreate:
-    // { num_mesa, empleado_id?, estado_pedido, hora_pedido, items[], notas? }
-    // Los items se mapean desde el carrito al formato que espera el backend.
+    // Normalizar items del carrito de manera totalmente resiliente
+    const payloadItems = cartItems.map((item) => ({
+      producto_id: String(item.product?.id || item.id || item._id || 'item'),
+      nombre: item.product?.nombre || item.nombre || 'Platillo',
+      precio_unitario: Number(item.product?.precio ?? item.precio_unitario ?? item.precio ?? 0),
+      cantidad: Math.max(1, parseInt(item.quantity ?? item.cantidad ?? 1, 10)),
+      observaciones: item.note || item.observaciones || ''
+    }));
+
     const body = {
       num_mesa,
-      empleado_id: null,          // Se reemplaza con user._id cuando AuthContext lo provea
+      empleado_id: null,
       estado_pedido: 'Pendiente',
       hora_pedido: horaActual,
       notas: customerNotes || '',
-      items: cartItems.map((item) => ({
-        producto_id: String(item.product.id), // _id string de MongoDB
-        nombre: item.product.nombre,
-        precio_unitario: item.product.precio,
-        cantidad: item.quantity,
-        observaciones: item.note || ''
-      }))
+      items: payloadItems
     };
 
     const res = await fetch(`${API_URL}/pedidos`, {
@@ -207,23 +276,46 @@ export function RestaurantProvider({ children }) {
     const backendResponse = await res.json();
     console.info('[RestaurantContext] Pedido creado en backend:', backendResponse);
 
-    // Construye el objeto de pedido local para actualizar la UI inmediatamente
+    // Items listos para consumo inmediato en la UI
+    const uiItems = payloadItems.map((it) => ({
+      product: {
+        id: it.producto_id,
+        nombre: it.nombre,
+        precio: it.precio_unitario
+      },
+      quantity: it.cantidad,
+      note: it.observaciones,
+      nombre: it.nombre,
+      precio: it.precio_unitario,
+      precio_unitario: it.precio_unitario,
+      cantidad: it.cantidad,
+      observaciones: it.observaciones
+    }));
+
+    const total = uiItems.reduce((acc, item) => acc + item.product.precio * item.quantity, 0);
+
     const newOrder = {
       id: backendResponse.id ?? `PED-${Math.floor(1000 + Math.random() * 9000)}`,
       hora: horaActual,
-      items: [...cartItems],
-      total: cartItems.reduce((acc, item) => acc + item.product.precio * item.quantity, 0),
+      num_mesa: num_mesa,
+      items: uiItems,
+      total: total,
+      subtotal: total,
       notas: customerNotes
     };
 
-    // Actualización optimista del estado local
-    setTables((prev) =>
-      prev.map((t) =>
-        t.id === num_mesa
-          ? { ...t, estado: 'Esperando', pedido: newOrder }
-          : t
-      )
-    );
+    // Actualización optimista del estado local garantizando que la mesa exista en la lista
+    setTables((prev) => {
+      const exists = prev.some((t) => t.id === num_mesa);
+      if (exists) {
+        return prev.map((t) =>
+          t.id === num_mesa
+            ? { ...t, estado: 'Esperando', pedido: newOrder }
+            : t
+        );
+      }
+      return [...prev, { id: num_mesa, estado: 'Esperando', pedido: newOrder }];
+    });
 
     // También actualiza el estado de la mesa en el backend
     try {
@@ -235,6 +327,9 @@ export function RestaurantProvider({ children }) {
     } catch (mesaErr) {
       console.warn('[RestaurantContext] No se pudo actualizar el estado de mesa en backend:', mesaErr);
     }
+
+    // Sincronizar mesas tras envío
+    await fetchTables();
 
     return newOrder;
   };
@@ -273,10 +368,10 @@ export function RestaurantProvider({ children }) {
       if (!res.ok) {
         const errBody = await res.text();
         console.error(`[RestaurantContext] updateTableStatus HTTP ${res.status}:`, errBody);
-        // Revertir actualización optimista recargando desde el servidor
         fetchTables();
       } else {
         console.info(`[RestaurantContext] Mesa ${tableId} → ${newStatus} (${estadoBackend})`);
+        fetchTables();
       }
     } catch (err) {
       console.error('[RestaurantContext] updateTableStatus error de red:', err);
@@ -369,6 +464,7 @@ export function RestaurantProvider({ children }) {
         // Extras útiles para mostrar estados de carga en la UI
         loadingTables,
         loadingProducts,
+        resetTable,
         refreshTables: fetchTables,
         refreshProducts: fetchProducts
       }}

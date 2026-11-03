@@ -13,11 +13,11 @@ El sistema ofrece una experiencia dual sincronizada en tiempo real: una interfaz
 1. **Frontend Desacoplado de Simulaciones:**
    - Se refactorizaron completamente los contextos de React (`RestaurantContext.jsx`, `CartContext.jsx` y `AuthContext.jsx`) eliminando los datos simulados de `localStorage` y `setTimeout`.
    - Todas las operaciones de carga de mesas, catálogo, pedidos y turnos se sincronizan de forma asíncrona mediante llamadas HTTP `fetch` reales al backend.
-   - Manejo de UI optimista (*Optimistic UI*) con reversión automática ante fallos de red.
+   - Manejo de UI optimista (_Optimistic UI_) con reversión automática ante fallos de red.
 
 2. **Migración Integral a MongoDB Atlas (Motor):**
    - Transición de la capa de persistencia relacional (SQLite/Turso) a base de datos orientada a documentos en **MongoDB Atlas**.
-   - Conexión no bloqueante (*async/await*) mediante `AsyncIOMotorClient` (`motor.motor_asyncio`).
+   - Conexión no bloqueante (_async/await_) mediante `AsyncIOMotorClient` (`motor.motor_asyncio`).
    - Modelo de datos con **documentos embebidos** (`items` dentro de `pedidos`, eliminando los costosos JOINs relacionales).
    - Traducción de las 13 consultas académicas obligatorias a operadores y agregaciones nativas de MongoDB (`$lookup`, `$lt`, `$set`, `$unset`, `drop()`).
 
@@ -31,16 +31,18 @@ El sistema ofrece una experiencia dual sincronizada en tiempo real: una interfaz
 ## Características Principales
 
 ### 📱 Experiencia del Cliente (Mobile-First / Acceso por Código QR)
+
 - **Acceso Directo por Mesa**: El cliente escanea el código QR de su mesa y accede a la URL dedicada `/mesa/:numeroMesa` sin necesidad de registro ni descargas.
 - **Catálogo Interactivo**: Filtrado rápido por categorías (Entradas, Platos de Fondo, Postres, Bebidas) y consulta en vivo desde MongoDB Atlas.
 - **Detalle y Personalización de Platillos**: Modal con selector de cantidades y campo de especificaciones/notas para cocina (ej. término de cocción, sin alérgenos).
 - **Carrito de Compras y Comanda**: Persistencia temporal local mientras el cliente arma el pedido, envío asíncrono (`POST /pedidos`) con items embebidos y bloqueo contra doble envío accidental.
-- **Monitor de Estado del Pedido**: Visualización en vivo del estado de preparación de la mesa (*Esperando*, *En preparación*, *Listo*, *Entregado*).
+- **Monitor de Estado del Pedido**: Visualización en vivo del estado de preparación de la mesa (_Esperando_, _En preparación_, _Listo_, _Entregado_).
 - **Indicadores de Disponibilidad**: Platillos no disponibles marcados al instante para evitar pedidos sin stock.
 
 ### 🖥️ Portal de Personal y Cocina (Desktop & Tablet)
-- **Autenticación y Control de Turnos**: Pantalla de acceso conectada a la base de datos con gestión de roles (*Mesero / Garzón*, *Cocinero / Chef*, *Administrador*) y persistencia de sesión.
-- **Panel de Salón y Mesas**: Cuadrícula dinámica con el estado operativo de todas las mesas del restaurante (*Libre*, *Esperando*, *En preparación*, *Listo*, *Ocupada*).
+
+- **Autenticación y Control de Turnos**: Pantalla de acceso conectada a la base de datos con gestión de roles (_Mesero / Garzón_, _Cocinero / Chef_, _Administrador_) y persistencia de sesión.
+- **Panel de Salón y Mesas**: Cuadrícula dinámica con el estado operativo de todas las mesas del restaurante (_Libre_, _Esperando_, _En preparación_, _Listo_, _Ocupada_).
 - **Comandera Digital Interactiva (`CookOrderModal`)**: Popup al hacer clic en mesas con órdenes activas; permite revisar ítems, cantidades, notas especiales de comensales y actualizar el estado de preparación con un solo clic (`PUT /mesas/{num_mesa}/estado`).
 - **Gestión de Inventario en Tiempo Real**: Pestaña dedicada para habilitar o pausar la disponibilidad de platos del catálogo en vivo mediante `PATCH /productos/{id}/disponible`.
 - **Generador e Impresor de Códigos QR**: Configuración de número de mesas (1 a 50 mesas), previsualización de códigos QR individuales y botón de impresión optimizado para mesas y manteles.
@@ -93,23 +95,24 @@ C-est-dou-P-restaurant/
 
 El backend traduce las 13 consultas obligatorias a sintaxis nativa de MongoDB mediante el driver `motor`:
 
-| Nº | Operación / Endpoint | Equivalente SQL | Implementación MongoDB (Motor) |
-| :--- | :--- | :--- | :--- |
-| **1** | `POST /mesas` | `INSERT INTO mesa` | `db.mesas.insert_one(mesa)` |
-| **2** | `POST /productos` | `INSERT INTO producto` | `db.producto.insert_one(producto)` |
-| **3** | `POST /pedidos` | `INSERT INTO pedido + detalle_pedido` | `db.pedidos.insert_one(pedido)` con `items` embebidos |
-| **4** | `GET /productos/filtrados` | `SELECT WHERE precio < ?` | `db.producto.find({"precio": {"$lt": x}})` |
-| **5** | `GET /pedidos/info-mesas` | `SELECT con JOIN (3 tablas)` | Agregación `$lookup` con colección `visitas` para resolver `num_mesa` |
-| **6** | `GET /pedidos/detalles-platos` | `SELECT con JOIN (2 tablas)` | Proyección directa sobre `items` embebidos en `pedidos` |
-| **7** | `PUT /mesas/{num_mesa}/estado` | `UPDATE mesa SET estado = ?` | `db.mesas.update_one({"num_mesa": n}, {"$set": {"estado": s}})` |
-| **8** | `PUT /productos/{id}/precio` | `UPDATE producto SET precio = ?` | `db.producto.update_one(filtro, {"$set": {"precio": p}})` |
-| **9** | `DELETE /productos/{id}` | `DELETE FROM producto WHERE id` | `db.producto.delete_one(filtro)` por `ObjectId` o `id_plato` |
-| **10** | `DELETE /mesas/{num_mesa}` | `DELETE FROM mesa WHERE estado='Libre'` | `db.mesas.delete_one({"num_mesa": n, "estado": "Libre"})` |
-| **11** | `POST /admin/alter-1` | `ALTER TABLE ADD COLUMN telefono` | `db.empleados.update_many({}, {"$set": {"telefono": None}})` |
-| **12** | `DELETE /admin/alter-1/revertir` | `ALTER TABLE DROP COLUMN telefono` | `db.empleados.update_many({}, {"$unset": {"telefono": ""}})` |
-| **13** | `DELETE /admin/drop/promociones`| `DROP TABLE promocion_temporada` | `db.promocion_temporada.drop()` |
+| Nº     | Operación / Endpoint             | Equivalente SQL                         | Implementación MongoDB (Motor)                                        |
+| :----- | :------------------------------- | :-------------------------------------- | :-------------------------------------------------------------------- |
+| **1**  | `POST /mesas`                    | `INSERT INTO mesa`                      | `db.mesas.insert_one(mesa)`                                           |
+| **2**  | `POST /productos`                | `INSERT INTO producto`                  | `db.producto.insert_one(producto)`                                    |
+| **3**  | `POST /pedidos`                  | `INSERT INTO pedido + detalle_pedido`   | `db.pedidos.insert_one(pedido)` con `items` embebidos                 |
+| **4**  | `GET /productos/filtrados`       | `SELECT WHERE precio < ?`               | `db.producto.find({"precio": {"$lt": x}})`                            |
+| **5**  | `GET /pedidos/info-mesas`        | `SELECT con JOIN (3 tablas)`            | Agregación `$lookup` con colección `visitas` para resolver `num_mesa` |
+| **6**  | `GET /pedidos/detalles-platos`   | `SELECT con JOIN (2 tablas)`            | Proyección directa sobre `items` embebidos en `pedidos`               |
+| **7**  | `PUT /mesas/{num_mesa}/estado`   | `UPDATE mesa SET estado = ?`            | `db.mesas.update_one({"num_mesa": n}, {"$set": {"estado": s}})`       |
+| **8**  | `PUT /productos/{id}/precio`     | `UPDATE producto SET precio = ?`        | `db.producto.update_one(filtro, {"$set": {"precio": p}})`             |
+| **9**  | `DELETE /productos/{id}`         | `DELETE FROM producto WHERE id`         | `db.producto.delete_one(filtro)` por `ObjectId` o `id_plato`          |
+| **10** | `DELETE /mesas/{num_mesa}`       | `DELETE FROM mesa WHERE estado='Libre'` | `db.mesas.delete_one({"num_mesa": n, "estado": "Libre"})`             |
+| **11** | `POST /admin/alter-1`            | `ALTER TABLE ADD COLUMN telefono`       | `db.empleados.update_many({}, {"$set": {"telefono": None}})`          |
+| **12** | `DELETE /admin/alter-1/revertir` | `ALTER TABLE DROP COLUMN telefono`      | `db.empleados.update_many({}, {"$unset": {"telefono": ""}})`          |
+| **13** | `DELETE /admin/drop/promociones` | `DROP TABLE promocion_temporada`        | `db.promocion_temporada.drop()`                                       |
 
 ### Endpoints Complementarios
+
 - `POST /empleados/login`: Búsqueda flexible por correo, username o rol (`find_one`), devolviendo sesión normalizada para React.
 - `PATCH /productos/{id}/disponible`: Actualización atómica de `disponibilidad` (`"En stock"` o `"Agotado"`).
 - `POST /admin/alter-2` y `DELETE /admin/alter-2/revertir`: Agrega o remueve el atributo `fecha_entrega` en `pedidos`.
@@ -133,6 +136,7 @@ El clúster en la nube aloja la base de datos `restaurante_db` organizada en las
 ## Configuración y Ejecución
 
 ### Prerrequisitos
+
 - **Python 3.10+**
 - **Node.js 18+** y **pnpm** (o npm)
 
@@ -141,6 +145,7 @@ El clúster en la nube aloja la base de datos `restaurante_db` organizada en las
 ### 1. Backend (FastAPI + MongoDB Atlas)
 
 1. Ingresa a la carpeta del backend:
+
    ```bash
    cd backend
    ```
@@ -158,19 +163,23 @@ El clúster en la nube aloja la base de datos `restaurante_db` organizada en las
      ```
 
 3. Instala las dependencias:
+
    ```bash
    pip install -r requirements.txt
    ```
 
 4. Configura las variables de entorno en `backend/.env`:
+
    ```env
    MONGO_URI=mongodb+srv://<usuario>:<password>@cluster.mongodb.net/restaurante_db?retryWrites=true&w=majority
    ```
 
-5. *(Opcional)* Ejecuta la suite de verificación automatizada:
+5. _(Opcional)_ Ejecuta la suite de verificación automatizada:
+
    ```bash
    python test_suite.py
    ```
+
    Debe arrojar `8/8 PRUEBAS EXITOSAS`.
 
 6. Inicia el servidor de desarrollo:
@@ -184,16 +193,19 @@ El clúster en la nube aloja la base de datos `restaurante_db` organizada en las
 ### 2. Frontend (React 19 + Vite)
 
 1. En una nueva terminal, ingresa a la carpeta del frontend:
+
    ```bash
    cd frontend
    ```
 
 2. Configura la URL del backend en `frontend/.env`:
+
    ```env
    VITE_API_URL=http://localhost:8000
    ```
 
 3. Instala los paquetes:
+
    ```bash
    pnpm install
    # o bien: npm install
@@ -210,14 +222,15 @@ El clúster en la nube aloja la base de datos `restaurante_db` organizada en las
 
 ## Rutas y Flujo de Uso
 
-| Ruta | Audiencia | Descripción |
-| :--- | :--- | :--- |
-| `/` | Personal / Cocina | Portal principal para empleados. Solicita login autenticado contra MongoDB y da acceso a la comandera, salón e inventario. |
-| `/staff/qrs` | Personal / Admin | Generador e impresor de códigos QR por mesa. |
-| `/mesa/:numeroMesa` | Clientes (QR) | Vista exclusiva tipo smartphone para clientes de la mesa indicada (ej. `/mesa/1`, `/mesa/2`). |
-| `/menu` / `/cliente` | Clientes | Accesos rápidos de redirección a mesa para pruebas. |
+| Ruta                 | Audiencia         | Descripción                                                                                                                |
+| :------------------- | :---------------- | :------------------------------------------------------------------------------------------------------------------------- |
+| `/`                  | Personal / Cocina | Portal principal para empleados. Solicita login autenticado contra MongoDB y da acceso a la comandera, salón e inventario. |
+| `/staff/qrs`         | Personal / Admin  | Generador e impresor de códigos QR por mesa.                                                                               |
+| `/mesa/:numeroMesa`  | Clientes (QR)     | Vista exclusiva tipo smartphone para clientes de la mesa indicada (ej. `/mesa/1`, `/mesa/2`).                              |
+| `/menu` / `/cliente` | Clientes          | Accesos rápidos de redirección a mesa para pruebas.                                                                        |
 
 ### Flujo de Prueba Recomendado
+
 1. Abre `http://localhost:5173/` e inicia sesión como Administrador (`admin@restaurant.cl`) o Cocinero.
 2. Abre en otra pestaña o ventana de incógnito la ruta del cliente `http://localhost:5173/mesa/1`.
 3. Desde la mesa 1, agrega platillos al carrito, añade observaciones para cocina y pulsa **Confirmar Pedido**.

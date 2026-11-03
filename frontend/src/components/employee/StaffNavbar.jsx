@@ -13,7 +13,6 @@ export default function StaffNavbar() {
         </div>
         <div className="staff-brand-text">
           <span className="staff-brand-name">C'est doux P</span>
-          <span className="staff-portal-tag">Portal del Personal</span>
         </div>
       </div>
 
@@ -25,14 +24,6 @@ export default function StaffNavbar() {
         >
           <ChefHat size={16} />
           <span>Cocina & Pedidos</span>
-        </NavLink>
-
-        <NavLink
-          to="/staff/qrs"
-          className={({ isActive }) => `staff-nav-item ${isActive ? 'active' : ''}`}
-        >
-          <QrCode size={16} />
-          <span>Generador de QRs</span>
         </NavLink>
 
         <Link
