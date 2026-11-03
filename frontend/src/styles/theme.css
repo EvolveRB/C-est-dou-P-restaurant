@@ -30,9 +30,9 @@
   --emp-btn-hover: #4A1217;
   --emp-accent: #B85D43;
 
-  /* Typography */
+  /* Typography: Estandarización unificada en Plus Jakarta Sans */
   --font-sans: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  --font-serif: 'Playfair Display', Georgia, serif;
+  --font-serif: var(--font-sans);
   
   /* Radii */
   --radius-sm: 8px;
@@ -48,15 +48,19 @@
   --shadow-modal: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
 }
 
-* {
+*, *::before, *::after {
   box-sizing: border-box;
   margin: 0;
   padding: 0;
+  font-family: var(--font-sans);
   -webkit-tap-highlight-color: transparent;
 }
 
+body, button, input, select, textarea, h1, h2, h3, h4, h5, h6, p, span, a, label {
+  font-family: var(--font-sans) !important;
+}
+
 body {
-  font-family: var(--font-sans);
   color: var(--c-text-main);
   background-color: var(--emp-bg);
   min-height: 100vh;
@@ -65,14 +69,12 @@ body {
 }
 
 button {
-  font-family: inherit;
   cursor: pointer;
   border: none;
   background: none;
 }
 
 input, select, textarea {
-  font-family: inherit;
   font-size: 1rem;
 }
 
@@ -82,7 +84,6 @@ input, select, textarea {
 .btn-primary {
   background-color: var(--c-burgundy-800);
   color: #FFFFFF !important;
-  font-family: var(--font-sans);
   font-weight: 700;
   border: none;
   border-radius: var(--radius-md);
@@ -112,7 +113,6 @@ input, select, textarea {
 .btn-secondary {
   background-color: var(--c-terracotta-light);
   color: var(--c-burgundy-800) !important;
-  font-family: var(--font-sans);
   font-weight: 700;
   border: 1px solid var(--c-cream-border);
   border-radius: var(--radius-md);
@@ -144,6 +144,16 @@ input, select, textarea {
   border: 1px solid var(--c-cream-border);
   letter-spacing: 0.2px;
   white-space: nowrap;
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+  transition: all 0.15s ease;
+}
+
+.badge-tag:hover {
+  background-color: var(--c-terracotta);
+  color: #FFFFFF;
+  border-color: var(--c-terracotta);
 }
 
 /* Custom subtle scrollbar */

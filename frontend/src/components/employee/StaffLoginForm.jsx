@@ -100,7 +100,7 @@ export default function StaffLoginForm() {
                   color: '#334155'
                 }}
               >
-                👑 Admin
+                Admin
               </button>
               <button
                 type="button"
@@ -116,7 +116,7 @@ export default function StaffLoginForm() {
                   color: '#334155'
                 }}
               >
-                🍳 Cocina
+                Cocina
               </button>
               <button
                 type="button"
@@ -132,7 +132,7 @@ export default function StaffLoginForm() {
                   color: '#334155'
                 }}
               >
-                📋 Garzón
+                Garzón
               </button>
             </div>
           </div>

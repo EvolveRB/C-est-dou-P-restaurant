@@ -41,7 +41,7 @@ export default function GarzonNavbar() {
         <div className="staff-user-pill">
           <User size={15} color="#94A3B8" />
           <span style={{ fontWeight: 600 }}>{user?.displayName || 'Garzón'}</span>
-          <span className="staff-user-role" style={{ backgroundColor: '#FEF3C7', color: '#92400E' }}>
+          <span className="staff-user-role" style={{ backgroundColor: '#F1F5F9', color: '#475569' }}>
             Garzón
           </span>
         </div>

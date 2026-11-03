@@ -129,7 +129,7 @@ export default function AdminDashboardPage() {
             </h1>
           </div>
 
-          <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+          <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
             <span style={{
               display: 'flex',
               alignItems: 'center',
@@ -256,7 +256,7 @@ export default function AdminDashboardPage() {
               </div>
 
               {/* Botones de ajuste rápido */}
-              <div style={{ display: 'flex', gap: '6px' }}>
+              <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}>
                 {[8, 10, 12, 16].map((num) => (
                   <button
                     key={num}
@@ -364,13 +364,13 @@ export default function AdminDashboardPage() {
                 key={f.id}
                 onClick={() => setActiveTab(f.id)}
                 style={{
-                  backgroundColor: activeTab === f.id ? 'var(--c-terracotta-light)' : '#FFFFFF',
-                  color: activeTab === f.id ? 'var(--c-burgundy-800)' : '#6B7280',
-                  border: activeTab === f.id ? '1.5px solid var(--c-terracotta)' : '1px solid #E5D8CC',
+                  backgroundColor: activeTab === f.id ? '#1E293B' : '#FFFFFF',
+                  color: activeTab === f.id ? '#FFFFFF' : '#475569',
+                  border: activeTab === f.id ? '1px solid #1E293B' : '1px solid #CBD5E1',
                   padding: '6px 14px',
                   borderRadius: '10px',
                   fontSize: '12.5px',
-                  fontWeight: 700,
+                  fontWeight: 600,
                   cursor: 'pointer'
                 }}
               >
@@ -412,8 +412,8 @@ export default function AdminDashboardPage() {
                           width: '42px',
                           height: '42px',
                           borderRadius: '12px',
-                          backgroundColor: isCocinero ? '#FEF3C7' : isGarzon ? '#F3E8FF' : '#FEE2E2',
-                          color: isCocinero ? '#B45309' : isGarzon ? '#7E22CE' : '#991B1B',
+                          backgroundColor: '#F1F5F9',
+                          color: '#475569',
                           display: 'flex',
                           alignItems: 'center',
                           justifyContent: 'center',
@@ -481,19 +481,19 @@ export default function AdminDashboardPage() {
                       value={rolActual}
                       onChange={(e) => handleRoleChange(empId, e.target.value)}
                       style={{
-                        padding: '5px 10px',
+                        padding: '6px 12px',
                         borderRadius: '8px',
                         fontSize: '12px',
-                        fontWeight: 700,
-                        backgroundColor: isCocinero ? '#FEF3C7' : isGarzon ? '#F3E8FF' : '#FEE2E2',
-                        color: isCocinero ? '#B45309' : isGarzon ? '#7E22CE' : '#991B1B',
+                        fontWeight: 600,
+                        backgroundColor: '#F8FAFC',
+                        color: '#1E293B',
                         border: '1px solid #CBD5E1',
                         cursor: 'pointer'
                       }}
                     >
-                      <option value="Cocinero">👨‍🍳 Cocinero</option>
-                      <option value="Garzón">🍽️ Garzón</option>
-                      <option value="Administrador">🛡️ Administrador</option>
+                      <option value="Cocinero">Cocinero</option>
+                      <option value="Garzón">Garzón</option>
+                      <option value="Administrador">Administrador</option>
                     </select>
                   </div>
                 </div>
@@ -504,30 +504,68 @@ export default function AdminDashboardPage() {
       </div>
 
       {/* ====================================================================
-          MODAL: AGREGAR NUEVO TRABAJADOR
+          MODAL: AGREGAR NUEVO TRABAJADOR (Centrado en pantalla)
          ==================================================================== */}
       {showAddModal && (
         <div
-          className="modal-overlay"
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            width: '100vw',
+            height: '100vh',
+            backgroundColor: 'rgba(15, 23, 42, 0.5)',
+            backdropFilter: 'blur(4px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 9999,
+            padding: '20px',
+            boxSizing: 'border-box'
+          }}
           onClick={() => setShowAddModal(false)}
-          style={{ zIndex: 1200 }}
         >
           <div
-            className="modal-sheet"
+            style={{
+              backgroundColor: '#FFFFFF',
+              borderRadius: '20px',
+              width: '100%',
+              maxWidth: '480px',
+              maxHeight: '90vh',
+              overflowY: 'auto',
+              padding: '28px',
+              boxShadow: '0 20px 45px rgba(0, 0, 0, 0.2)',
+              border: '1px solid #E2E8F0',
+              boxSizing: 'border-box',
+              position: 'relative'
+            }}
             onClick={(e) => e.stopPropagation()}
-            style={{ maxWidth: '460px' }}
           >
-            <div className="modal-header">
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <UserPlus size={20} color="var(--c-burgundy-800)" />
-                <h2 style={{ fontSize: '19px', fontWeight: 800, color: 'var(--c-burgundy-800)', margin: 0 }}>
+                <h2 style={{ fontSize: '19px', fontWeight: 800, color: '#1F242E', margin: 0 }}>
                   Nuevo Personal
                 </h2>
               </div>
               <button
-                className="modal-close-btn"
+                type="button"
                 onClick={() => setShowAddModal(false)}
                 aria-label="Cerrar modal"
+                style={{
+                  background: '#F1F5F9',
+                  border: 'none',
+                  borderRadius: '50%',
+                  width: '32px',
+                  height: '32px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  cursor: 'pointer',
+                  color: '#64748B'
+                }}
               >
                 <X size={18} />
               </button>
@@ -574,11 +612,11 @@ export default function AdminDashboardPage() {
                 <select
                   value={newRol}
                   onChange={(e) => setNewRol(e.target.value)}
-                  style={{ width: '100%', padding: '9px 12px', borderRadius: '10px', border: '1px solid #CBD5E1', fontSize: '13px', fontWeight: 700, backgroundColor: '#FFFFFF', boxSizing: 'border-box' }}
+                  style={{ width: '100%', padding: '9px 12px', borderRadius: '10px', border: '1px solid #CBD5E1', fontSize: '13px', fontWeight: 600, backgroundColor: '#FFFFFF', color: '#1E293B', boxSizing: 'border-box' }}
                 >
-                  <option value="Garzón">🍽️ Garzón (Atención de mesas)</option>
-                  <option value="Cocinero">👨‍🍳 Cocinero (Carta de elaboración)</option>
-                  <option value="Administrador">🛡️ Administrador (Gestión total)</option>
+                  <option value="Garzón">Garzón (Atención de mesas)</option>
+                  <option value="Cocinero">Cocinero (Carta de elaboración)</option>
+                  <option value="Administrador">Administrador (Gestión total)</option>
                 </select>
               </div>
 

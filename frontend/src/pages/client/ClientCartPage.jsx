@@ -7,7 +7,6 @@ import {
   ArrowRight,
   BellRing,
   CreditCard,
-  Lock,
   CheckCircle2,
   X,
   Banknote,
@@ -133,48 +132,12 @@ export default function ClientCartPage({ onGoToMenu, onOrderSuccess }) {
   return (
     <div className="client-scroll-area">
       {/* ────────────────────────────────────────────────────────────────────
-          SECCIÓN 1: Platos bloqueados en cocina (si ya se envió comanda)
+          SECCIÓN 1: Platos en cocina (si ya se envió comanda)
          ──────────────────────────────────────────────────────────────────── */}
       {hasKitchenOrder && (
         <div style={{ marginBottom: '20px' }}>
-          {/* Banner de comanda activa */}
-          <div style={{
-            background: 'linear-gradient(135deg, #FEF3C7, #FDE68A)',
-            border: '1px solid #FCD34D',
-            borderRadius: '16px',
-            padding: '12px 14px',
-            marginBottom: '12px',
-            display: 'flex',
-            alignItems: 'flex-start',
-            gap: '10px',
-            boxShadow: '0 4px 12px rgba(217, 119, 6, 0.12)'
-          }}>
-            <Lock size={19} color="#B45309" style={{ marginTop: '2px', flexShrink: 0 }} />
-            <div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <span style={{ fontSize: '13px', fontWeight: 800, color: '#92400E' }}>
-                  Comanda en Cocina • Mesa {tableNumber}
-                </span>
-                <span style={{
-                  fontSize: '10.5px',
-                  fontWeight: 700,
-                  background: '#B45309',
-                  color: '#FFFFFF',
-                  padding: '2px 7px',
-                  borderRadius: '6px'
-                }}>
-                  {activeOrder.estado || 'En preparación'}
-                </span>
-              </div>
-              <div style={{ fontSize: '11.5px', color: '#92400E', marginTop: '3px', lineHeight: 1.4 }}>
-                Estos platos ya están siendo elaborados por el chef (bloqueados). Abajo puedes agregar platos adicionales o solicitar la cuenta.
-              </div>
-            </div>
-          </div>
-
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
             <h3 style={{ fontSize: '15px', fontWeight: 800, color: 'var(--c-burgundy-800)', margin: 0, display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <Lock size={14} color="#B45309" />
               <span>Platos en Cocina ({kitchenItems.length})</span>
             </h3>
             <span style={{ fontSize: '12.5px', fontWeight: 700, color: 'var(--c-burgundy-800)' }}>
@@ -450,24 +413,6 @@ export default function ClientCartPage({ onGoToMenu, onOrderSuccess }) {
           <BellRing size={16} />
           <span>{callingWaiter ? 'Notificando al Garzón...' : `Llamar Garzón a Mesa ${tableNumber}`}</span>
         </button>
-
-        {/* Opción para limpiar / liberar mesa si el cliente quiere reiniciar */}
-        {hasKitchenOrder && (
-          <button
-            onClick={handleFinishAndFreeTable}
-            style={{
-              background: 'none',
-              border: 'none',
-              color: '#9CA3AF',
-              fontSize: '12px',
-              cursor: 'pointer',
-              padding: '6px',
-              textDecoration: 'underline'
-            }}
-          >
-            Limpiar y liberar mesa manualmente
-          </button>
-        )}
       </div>
 
       {/* ====================================================================

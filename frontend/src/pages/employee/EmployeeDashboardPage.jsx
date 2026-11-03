@@ -46,7 +46,7 @@ export default function EmployeeDashboardPage() {
       }}>
         {/* Encabezado PC con título y selector de pestañas con paleta unificada */}
         <div style={{
-          padding: '28px 36px 20px',
+          padding: '24px 32px 18px',
           display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'flex-start',
@@ -55,7 +55,7 @@ export default function EmployeeDashboardPage() {
           borderBottom: '1px solid #F2E3D8'
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
-            <h1 style={{ fontSize: '32px', fontWeight: 800, color: '#14171F', lineHeight: 1.15, margin: 0 }}>
+            <h1 style={{ fontSize: '30px', fontWeight: 800, color: '#14171F', lineHeight: 1.15, margin: 0 }}>
               {activeTab === 'pedidos' ? 'Pedidos' : 'Inventario'}
             </h1>
             <button
@@ -127,29 +127,31 @@ export default function EmployeeDashboardPage() {
         </div>
 
         {/* ========================================================
-            TAB 1: VISTA DE PEDIDOS (PC)
+            TAB 1: VISTA DE PEDIDOS (Mesas con tamaños estáticos y simétricos)
            ======================================================== */}
         {activeTab === 'pedidos' && (
           <div style={{
             padding: '24px 32px 32px',
             flex: 1,
             display: 'flex',
-            flexDirection: 'column'
+            flexDirection: 'column',
+            minHeight: 0
           }}>
             <div style={{
               backgroundColor: '#FFFFFF',
               border: '1px solid #EEDBCE',
               borderRadius: '22px',
-              padding: '28px 32px',
+              padding: '24px 28px',
               boxShadow: '0 4px 18px rgba(0, 0, 0, 0.02)',
               flex: 1,
               display: 'flex',
-              flexDirection: 'column'
+              flexDirection: 'column',
+              minHeight: 0
             }}>
               {/* Cabecera del bloque */}
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
                 <div>
-                  <h2 style={{ fontSize: '22px', fontWeight: 800, color: '#1F242E' }}>
+                  <h2 style={{ fontSize: '22px', fontWeight: 800, color: '#1F242E', margin: 0 }}>
                     Carta de elaboración
                   </h2>
                 </div>
@@ -165,24 +167,29 @@ export default function EmployeeDashboardPage() {
                 </span>
               </div>
 
-              {/* Grilla PC de mesas */}
+              {/* Grilla PC de mesas con tarjetas de tamaño estático y 100% simétricas */}
               <div style={{
                 display: 'grid',
                 gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
                 gap: '18px',
                 flex: 1,
-                alignContent: 'start'
+                overflowY: 'auto',
+                alignContent: 'start',
+                paddingRight: '6px'
               }}>
                 {tables.map((mesa) => {
                   const hasOrder = mesa.pedido !== null && mesa.estado !== 'Libre';
                   const orderItems = hasOrder && Array.isArray(mesa.pedido.items) ? mesa.pedido.items : [];
+                  const maxItemsToShow = 2;
+                  const displayedItems = orderItems.slice(0, maxItemsToShow);
+                  const remainingCount = orderItems.length - maxItemsToShow;
 
                   return (
                     <div
                       key={mesa.id}
                       onClick={() => handleTableClick(mesa)}
                       style={{
-                        minHeight: hasOrder ? '170px' : '100px',
+                        height: '220px', // Tamaño estático para simetría absoluta
                         borderRadius: '20px',
                         backgroundColor: hasOrder ? '#FFF9F6' : '#FAF5F0',
                         color: '#1F242E',
@@ -193,8 +200,9 @@ export default function EmployeeDashboardPage() {
                         padding: '16px 18px',
                         cursor: hasOrder ? 'pointer' : 'default',
                         transition: 'all 0.2s ease',
-                        boxShadow: hasOrder ? '0 6px 18px rgba(216, 107, 82, 0.16)' : 'none',
-                        textAlign: 'left'
+                        boxShadow: hasOrder ? '0 6px 18px rgba(216, 107, 82, 0.14)' : 'none',
+                        textAlign: 'left',
+                        boxSizing: 'border-box'
                       }}
                       title={hasOrder ? `Ver comanda de Mesa ${mesa.id}` : `Mesa ${mesa.id} sin pedido`}
                     >
@@ -213,13 +221,16 @@ export default function EmployeeDashboardPage() {
                               padding: '3px 10px',
                               borderRadius: '8px'
                             }}>
-                              {mesa.estado === 'Esperando' ? 'Esperando comanda' : (mesa.estado === 'Listo para servir' || mesa.estado === 'Listo') ? '🍽️ Listo para servir' : 'En preparación'}
+                              {mesa.estado === 'Esperando' ? 'Esperando comanda' : (mesa.estado === 'Listo para servir' || mesa.estado === 'Listo') ? 'Listo para servir' : 'En preparación'}
                             </span>
                           ) : (
                             <span style={{
-                              fontSize: '12px',
-                              fontWeight: 500,
-                              color: '#9CA3AF'
+                              fontSize: '11.5px',
+                              fontWeight: 700,
+                              color: '#059669',
+                              backgroundColor: '#D1FAE5',
+                              padding: '3px 10px',
+                              borderRadius: '8px'
                             }}>
                               Libre
                             </span>
@@ -227,61 +238,99 @@ export default function EmployeeDashboardPage() {
                         </div>
 
                         {/* Detalle de platos a elaborar si hay pedido */}
-                        {hasOrder && (
-                          <div style={{ marginTop: '8px' }}>
+                        {hasOrder ? (
+                          <div style={{ marginTop: '6px' }}>
                             <div style={{ fontSize: '11px', fontWeight: 800, color: 'var(--c-terracotta)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '6px' }}>
                               Platos a elaborar ({orderItems.length}):
                             </div>
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '5px', maxHeight: '120px', overflowY: 'auto' }}>
-                              {orderItems.map((item, idx) => (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
+                              {displayedItems.map((item, idx) => (
                                 <div
                                   key={idx}
                                   style={{
                                     display: 'flex',
                                     justifyContent: 'space-between',
                                     alignItems: 'center',
-                                    fontSize: '13px',
+                                    fontSize: '12px',
                                     background: '#FFFFFF',
-                                    padding: '6px 10px',
-                                    borderRadius: '10px',
-                                    border: '1px solid #F0E4D8'
+                                    padding: '5px 8px',
+                                    borderRadius: '8px',
+                                    border: '1px solid #F0E4D8',
+                                    whiteSpace: 'nowrap',
+                                    overflow: 'hidden'
                                   }}
                                 >
-                                  <span style={{ fontWeight: 700, color: '#1F242E' }}>
+                                  <span style={{ fontWeight: 700, color: '#1F242E', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                                     {item.quantity || item.cantidad || 1}x {item.product?.nombre || item.nombre || 'Platillo'}
                                   </span>
                                   {item.note && (
                                     <span style={{
-                                      fontSize: '11px',
+                                      fontSize: '10.5px',
                                       color: 'var(--c-terracotta)',
                                       fontStyle: 'italic',
-                                      maxWidth: '120px',
+                                      marginLeft: '6px',
+                                      maxWidth: '80px',
                                       overflow: 'hidden',
-                                      textOverflow: 'ellipsis',
-                                      whiteSpace: 'nowrap'
+                                      textOverflow: 'ellipsis'
                                     }}>
                                       "{item.note}"
                                     </span>
                                   )}
                                 </div>
                               ))}
+
+                              {/* Indicador cuando hay más platos: el cocinero hace clic en la comanda para ver todo */}
+                              {remainingCount > 0 && (
+                                <div style={{
+                                  fontSize: '11px',
+                                  fontWeight: 700,
+                                  color: 'var(--c-terracotta)',
+                                  textAlign: 'center',
+                                  padding: '4px',
+                                  background: '#FDF4EF',
+                                  borderRadius: '6px',
+                                  border: '1px dashed #EEDBCE'
+                                }}>
+                                  +{remainingCount} {remainingCount === 1 ? 'plato más' : 'platos más'} (clic para ver todo)
+                                </div>
+                              )}
                             </div>
+                          </div>
+                        ) : (
+                          /* Estado simétrico cuando la mesa está libre */
+                          <div style={{
+                            height: '95px',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: '6px',
+                            color: '#9CA3AF'
+                          }}>
+                            <Utensils size={24} strokeWidth={1.5} color="#CBD5E1" />
+                            <span style={{ fontSize: '12px', fontWeight: 600 }}>Mesa disponible</span>
+                            <span style={{ fontSize: '10.5px', color: '#94A3B8' }}>Sin comanda activa</span>
                           </div>
                         )}
                       </div>
 
                       {hasOrder ? (
-                        <div style={{ marginTop: '12px', paddingTop: '8px', borderTop: '1px solid #F2E3D8', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <span style={{ fontSize: '11.5px', color: '#6B7280' }}>
+                        <div style={{ marginTop: 'auto', paddingTop: '8px', borderTop: '1px solid #F2E3D8', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <span style={{ fontSize: '11px', color: '#6B7280' }}>
                             Hora: <strong>{mesa.pedido?.hora || '--:--'}</strong>
                           </span>
-                          <span style={{ fontSize: '12px', fontWeight: 800, color: 'var(--c-burgundy-800)' }}>
-                            Ver Comanda →
+                          <span style={{ fontSize: '11.5px', fontWeight: 800, color: 'var(--c-burgundy-800)' }}>
+                            Ver Comanda Completa →
                           </span>
                         </div>
                       ) : (
-                        <div style={{ fontSize: '12px', color: '#9CA3AF', marginTop: '10px' }}>
-                          Mesa disponible
+                        <div style={{ marginTop: 'auto', paddingTop: '8px', borderTop: '1px solid #E8DDD2', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <span style={{ fontSize: '11px', color: '#10B981', fontWeight: 600 }}>
+                            ● Lista para ocupar
+                          </span>
+                          <span style={{ fontSize: '11px', color: '#9CA3AF' }}>
+                            Salón
+                          </span>
                         </div>
                       )}
                     </div>
@@ -293,26 +342,34 @@ export default function EmployeeDashboardPage() {
         )}
 
         {/* ========================================================
-            TAB 2: VISTA DE INVENTARIO (PC)
+            TAB 2: VISTA DE INVENTARIO (Abarca todo el espacio vacío)
            ======================================================== */}
         {activeTab === 'inventario' && (
           <div style={{
-            padding: '28px 36px 36px',
+            padding: '24px 32px 32px',
+            flex: 1,
             display: 'grid',
-            gridTemplateColumns: '1.45fr 1fr',
-            gap: '24px'
+            gridTemplateColumns: '1.25fr 1fr',
+            gap: '24px',
+            minHeight: 0,
+            boxSizing: 'border-box'
           }}>
-            {/* Columna Izquierda: Inventario */}
+            {/* Columna Izquierda: Inventario (Abarca todo el alto disponible) */}
             <div style={{
               backgroundColor: '#FFFFFF',
               border: '1px solid #EEDBCE',
               borderRadius: '22px',
               padding: '24px 28px',
-              boxShadow: '0 4px 18px rgba(0, 0, 0, 0.02)'
+              boxShadow: '0 4px 18px rgba(0, 0, 0, 0.02)',
+              display: 'flex',
+              flexDirection: 'column',
+              height: '100%',
+              minHeight: 0,
+              boxSizing: 'border-box'
             }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
                 <div>
-                  <h2 style={{ fontSize: '20px', fontWeight: 800, color: '#1F242E' }}>
+                  <h2 style={{ fontSize: '20px', fontWeight: 800, color: '#1F242E', margin: 0 }}>
                     Inventario
                   </h2>
                 </div>
@@ -328,14 +385,15 @@ export default function EmployeeDashboardPage() {
                 </span>
               </div>
 
-              {/* Grilla 2 columnas de platillos */}
+              {/* Grilla de platillos que abarca todo el espacio disponible sin cortes vacíos */}
               <div style={{
                 display: 'grid',
                 gridTemplateColumns: 'repeat(2, 1fr)',
                 gap: '14px',
-                maxHeight: '480px',
+                flex: 1,
                 overflowY: 'auto',
-                paddingRight: '6px'
+                paddingRight: '6px',
+                alignContent: 'start'
               }}>
                 {products.map((prod, index) => {
                   const hasImage = Boolean(prod.imagen);
@@ -351,14 +409,15 @@ export default function EmployeeDashboardPage() {
                         display: 'flex',
                         flexDirection: 'column',
                         opacity: prod.disponible ? 1 : 0.65,
-                        transition: 'all 0.2s ease'
+                        transition: 'all 0.2s ease',
+                        boxSizing: 'border-box'
                       }}
                     >
-                      {/* Vista Cocina: Renderizado condicional de imagen o icono neutro (sin placeholders falsos ni etiquetas engañosas) */}
+                      {/* Vista Cocina: Renderizado de imagen o icono neutro */}
                       {hasImage ? (
                         <div style={{
                           width: '100%',
-                          height: '90px',
+                          height: '95px',
                           borderRadius: '12px',
                           overflow: 'hidden',
                           marginBottom: '10px'
@@ -385,7 +444,7 @@ export default function EmployeeDashboardPage() {
                         </div>
                       )}
 
-                      <div style={{ fontSize: '14px', fontWeight: 800, color: '#1F242E', marginBottom: '8px' }}>
+                      <div style={{ fontSize: '14px', fontWeight: 800, color: '#1F242E', marginBottom: '6px' }}>
                         Plato {index + 1}: {prod.nombre}
                       </div>
 
@@ -439,7 +498,7 @@ export default function EmployeeDashboardPage() {
               </div>
             </div>
 
-            {/* Columna Derecha: Carta de elaboración (Mesas dinámicas) */}
+            {/* Columna Derecha: Carta de elaboración (Abarca todo el alto disponible) */}
             <div style={{
               backgroundColor: '#FFFFFF',
               border: '1px solid #EEDBCE',
@@ -447,11 +506,14 @@ export default function EmployeeDashboardPage() {
               padding: '24px 28px',
               display: 'flex',
               flexDirection: 'column',
-              boxShadow: '0 4px 18px rgba(0, 0, 0, 0.02)'
+              boxShadow: '0 4px 18px rgba(0, 0, 0, 0.02)',
+              height: '100%',
+              minHeight: 0,
+              boxSizing: 'border-box'
             }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
                 <div>
-                  <h2 style={{ fontSize: '20px', fontWeight: 800, color: '#1F242E' }}>
+                  <h2 style={{ fontSize: '20px', fontWeight: 800, color: '#1F242E', margin: 0 }}>
                     Carta de elaboración
                   </h2>
                 </div>
@@ -467,14 +529,15 @@ export default function EmployeeDashboardPage() {
                 </span>
               </div>
 
-              {/* Grilla dinámica de mesas */}
+              {/* Grilla dinámica de mesas que abarca todo el espacio */}
               <div style={{
                 display: 'grid',
-                gridTemplateColumns: '1fr 1fr',
+                gridTemplateColumns: 'repeat(2, 1fr)',
                 gap: '12px',
                 flex: 1,
                 overflowY: 'auto',
-                paddingRight: '4px'
+                paddingRight: '6px',
+                alignContent: 'start'
               }}>
                 {tables.map((mesa) => {
                   const hasOrder = mesa.pedido !== null && mesa.estado !== 'Libre';
@@ -484,20 +547,32 @@ export default function EmployeeDashboardPage() {
                       key={mesa.id}
                       onClick={() => handleTableClick(mesa)}
                       style={{
-                        padding: '14px',
-                        borderRadius: '14px',
+                        height: '76px', // Tamaño estático para simetría
+                        borderRadius: '16px',
                         backgroundColor: hasOrder ? '#EBBFB3' : '#FAF5F0',
                         color: hasOrder ? '#4A151A' : '#736B63',
                         border: hasOrder ? '1.5px solid #DCA99C' : '1px solid #E8DDD2',
                         fontSize: '15px',
                         fontWeight: hasOrder ? 800 : 600,
-                        textAlign: 'center',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '4px',
                         cursor: hasOrder ? 'pointer' : 'default',
-                        transition: 'all 0.15s ease'
+                        transition: 'all 0.15s ease',
+                        boxSizing: 'border-box'
                       }}
                       title={hasOrder ? `Ver comanda de Mesa ${mesa.id}` : `Mesa ${mesa.id} sin pedido`}
                     >
-                      Mesa {mesa.id}
+                      <span style={{ fontSize: '15px', fontWeight: 800 }}>Mesa {mesa.id}</span>
+                      <span style={{
+                        fontSize: '11px',
+                        fontWeight: 600,
+                        color: hasOrder ? 'var(--c-burgundy-800)' : '#9CA3AF'
+                      }}>
+                        {hasOrder ? (mesa.estado || 'En preparación') : 'Libre'}
+                      </span>
                     </button>
                   );
                 })}
