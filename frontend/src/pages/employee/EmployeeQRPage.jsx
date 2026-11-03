@@ -180,7 +180,7 @@ export default function EmployeeQRPage() {
             }}
           >
             <Printer size={16} />
-            <span>Imprimir Tarjetas QR</span>
+            <span>Exportar QR</span>
           </button>
         </div>
       </div>

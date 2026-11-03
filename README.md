@@ -23,9 +23,9 @@ El sistema ofrece una experiencia dual sincronizada en tiempo real: una interfaz
 
 3. **Refactorización UX/UI en Frontend (React):**
    - **Unificación de Botones y Tipografía**: Se estandarizaron los botones de acción principal en toda la aplicación bajo la paleta oficial (Borgoña `var(--c-burgundy-800)` / `#5C1D24` y Terracota), eliminando inconsistencias con botones negros o cafés (`#23272F`).
-   - **RF-05 (Badges de Etiquetas)**: En el catálogo del cliente y modal de detalle, se mapea el arreglo `etiquetas` de cada plato mostrando insignias visuales (ej. *"Vegetariano"*, *"Sin Gluten"*, *"Chef Choice"*).
+   - **RF-05 (Badges de Etiquetas)**: En el catálogo del cliente y modal de detalle, se mapea el arreglo `etiquetas` de cada plato mostrando insignias visuales (ej. _"Vegetariano"_, _"Sin Gluten"_, _"Chef Choice"_).
    - **RF-08 (Llamar al Garzón)**: Botón de acción directa disponible en el flujo del cliente (carrito y monitor de comanda) que consume el endpoint dedicado de visitas con confirmación inmediata.
-   - **Manejo de Errores UX con Toasts**: Notificaciones flotantes claras y consistentes para *"QR Inválido"* (al escanear un QR con token no autorizado / 403), *"Producto agotado"* (al intentar agregar platos pausados) y *"Carrito vacío"* (al intentar ordenar sin ítems).
+   - **Manejo de Errores UX con Toasts**: Notificaciones flotantes claras y consistentes para _"QR Inválido"_ (al escanear un QR con token no autorizado / 403), _"Producto agotado"_ (al intentar agregar platos pausados) y _"Carrito vacío"_ (al intentar ordenar sin ítems).
    - **Vista de Cocina e Inventario**: Eliminación de placeholders rectangulares falsos y etiquetas de texto estáticas ("Sin imagen asignada"). Se implementó renderizado condicional inteligente: si hay imagen válida se exhibe la foto; de lo contrario se presenta un icono neutro de cocina (`<Utensils />`).
 
 ---
@@ -95,36 +95,37 @@ C-est-dou-P-restaurant/
 
 ## Catálogo de Endpoints de la API
 
-| Endpoint | Método | Tag | Descripción |
-| :--- | :--- | :--- | :--- |
-| `/empleados/login` | `POST` | Auth | Autentica empleados y retorna rol de acceso |
-| `/mesas` | `POST` | 1. INSERT | Crea nueva mesa con número, estado y piso |
-| `/productos` | `POST` | 1. INSERT | Registra plato con `etiquetas`, tiempo y precio |
-| `/pedidos` | `POST` | 1. INSERT | Inserta pedido con `items` en snapshot y `visita_id` |
-| `/visitas` | `POST` | Visita | Inicia nueva visita para comensales en mesa |
-| `/productos/filtrados` | `GET` | 2. SELECT | Consulta catálogo de productos con sus etiquetas |
-| `/pedidos/info-mesas` | `GET` | 2. SELECT | Retorna comanda activa más reciente por mesa |
-| `/pedidos/detalles-platos` | `GET` | 2. SELECT | Retorna items embebidos en los pedidos |
-| `/mesas/{num_mesa}/estado` | `PUT` | 3. UPDATE | Sincroniza estado de mesa y pedidos activos |
-| `/mesas/{num_mesa}/liberar` | `POST` | 3. UPDATE | Libera mesa y finaliza pedidos anteriores |
-| `/productos/{id}/precio` | `PUT` | 3. UPDATE | Actualiza precio unitario del producto |
-| `/productos/{id}/disponible` | `PATCH` | 3. UPDATE | Activa o pausa disponibilidad en carta |
-| `/visitas/{id}/llamar-garzon` | `PATCH` | Visita | Marca `solicitud_garzon.activa = True` (RF-08) |
-| `/mesas/{num}/validar-qr` | `GET` | Mesa | Valida token QR; retorna 403 si no coincide |
-| `/productos/{id}` | `DELETE` | 4. DELETE | Elimina plato por ObjectId o id_plato |
-| `/mesas/{num_mesa}` | `DELETE` | 4. DELETE | Elimina mesa si su estado es 'Libre' |
-| `/admin/alter-1` | `POST` | 5. ALTER/DROP | Agrega atributo `telefono` a empleados |
-| `/admin/alter-1/revertir` | `DELETE` | 5. ALTER/DROP | Elimina atributo `telefono` de empleados |
-| `/admin/alter-2` | `POST` | 5. ALTER/DROP | Agrega atributo `fecha_entrega` a pedidos |
-| `/admin/alter-2/revertir` | `DELETE` | 5. ALTER/DROP | Elimina atributo `fecha_entrega` de pedidos |
-| `/admin/preparar-temporada` | `POST` | 5. ALTER/DROP | Crea colección promocional semilla |
-| `/admin/drop/promociones` | `DELETE` | 5. ALTER/DROP | Elimina colección promocional (DROP) |
+| Endpoint                      | Método   | Tag           | Descripción                                          |
+| :---------------------------- | :------- | :------------ | :--------------------------------------------------- |
+| `/empleados/login`            | `POST`   | Auth          | Autentica empleados y retorna rol de acceso          |
+| `/mesas`                      | `POST`   | 1. INSERT     | Crea nueva mesa con número, estado y piso            |
+| `/productos`                  | `POST`   | 1. INSERT     | Registra plato con `etiquetas`, tiempo y precio      |
+| `/pedidos`                    | `POST`   | 1. INSERT     | Inserta pedido con `items` en snapshot y `visita_id` |
+| `/visitas`                    | `POST`   | Visita        | Inicia nueva visita para comensales en mesa          |
+| `/productos/filtrados`        | `GET`    | 2. SELECT     | Consulta catálogo de productos con sus etiquetas     |
+| `/pedidos/info-mesas`         | `GET`    | 2. SELECT     | Retorna comanda activa más reciente por mesa         |
+| `/pedidos/detalles-platos`    | `GET`    | 2. SELECT     | Retorna items embebidos en los pedidos               |
+| `/mesas/{num_mesa}/estado`    | `PUT`    | 3. UPDATE     | Sincroniza estado de mesa y pedidos activos          |
+| `/mesas/{num_mesa}/liberar`   | `POST`   | 3. UPDATE     | Libera mesa y finaliza pedidos anteriores            |
+| `/productos/{id}/precio`      | `PUT`    | 3. UPDATE     | Actualiza precio unitario del producto               |
+| `/productos/{id}/disponible`  | `PATCH`  | 3. UPDATE     | Activa o pausa disponibilidad en carta               |
+| `/visitas/{id}/llamar-garzon` | `PATCH`  | Visita        | Marca `solicitud_garzon.activa = True` (RF-08)       |
+| `/mesas/{num}/validar-qr`     | `GET`    | Mesa          | Valida token QR; retorna 403 si no coincide          |
+| `/productos/{id}`             | `DELETE` | 4. DELETE     | Elimina plato por ObjectId o id_plato                |
+| `/mesas/{num_mesa}`           | `DELETE` | 4. DELETE     | Elimina mesa si su estado es 'Libre'                 |
+| `/admin/alter-1`              | `POST`   | 5. ALTER/DROP | Agrega atributo `telefono` a empleados               |
+| `/admin/alter-1/revertir`     | `DELETE` | 5. ALTER/DROP | Elimina atributo `telefono` de empleados             |
+| `/admin/alter-2`              | `POST`   | 5. ALTER/DROP | Agrega atributo `fecha_entrega` a pedidos            |
+| `/admin/alter-2/revertir`     | `DELETE` | 5. ALTER/DROP | Elimina atributo `fecha_entrega` de pedidos          |
+| `/admin/preparar-temporada`   | `POST`   | 5. ALTER/DROP | Crea colección promocional semilla                   |
+| `/admin/drop/promociones`     | `DELETE` | 5. ALTER/DROP | Elimina colección promocional (DROP)                 |
 
 ---
 
 ## Configuración y Ejecución
 
 ### 1. Backend (FastAPI + MongoDB Atlas)
+
 ```bash
 cd backend
 python -m venv venv
@@ -132,13 +133,16 @@ python -m venv venv
 pip install -r requirements.txt
 uvicorn main:app --reload --port 8000
 ```
+
 Swagger UI disponible en: `http://localhost:8000/docs`.
 
 ### 2. Frontend (React 19 + Vite)
+
 ```bash
 cd frontend
 pnpm install
 pnpm dev
 ```
+
 Aplicación disponible en: `http://localhost:5173`.
 Compilación de producción verificada con: `pnpm build`.

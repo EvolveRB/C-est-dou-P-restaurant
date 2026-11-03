@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react';
 import PlaceholderIcon from './PlaceholderIcon';
 import { formatPrice } from '../../data/initialProducts';
 import { Plus, Ban } from 'lucide-react';
@@ -5,6 +6,24 @@ import { useCart } from '../../context/CartContext';
 
 export default function ProductCard({ product, onOpenDetail }) {
   const { addToCart } = useCart();
+  const [imgError, setImgError] = useState(false);
+  const [currentSrc, setCurrentSrc] = useState(product.imagen);
+
+  useEffect(() => {
+    setCurrentSrc(product.imagen);
+    setImgError(false);
+  }, [product.imagen]);
+
+  const handleImgError = () => {
+    if (currentSrc && currentSrc.startsWith('/Imagenes/')) {
+      setCurrentSrc(currentSrc.replace('/Imagenes/', '/'));
+    } else if (currentSrc && !currentSrc.startsWith('http') && !currentSrc.includes('localhost:8000')) {
+      setCurrentSrc(`http://localhost:8000${currentSrc.startsWith('/') ? '' : '/'}${currentSrc}`);
+    } else {
+      setImgError(true);
+    }
+  };
+
   const isAvailable = product.disponible !== false;
   const etiquetas = Array.isArray(product.etiquetas) ? product.etiquetas : [];
 
@@ -44,10 +63,11 @@ export default function ProductCard({ product, onOpenDetail }) {
             Agotado
           </span>
         )}
-        {product.imagen ? (
+        {currentSrc && !imgError ? (
           <img
-            src={product.imagen}
+            src={currentSrc}
             alt={product.nombre}
+            onError={handleImgError}
             style={{ width: '100%', height: '100%', objectFit: 'cover' }}
           />
         ) : (

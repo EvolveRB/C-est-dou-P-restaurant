@@ -4,3 +4,4 @@ python-dotenv
 motor
 pymongo
 pydantic
+aiofiles
