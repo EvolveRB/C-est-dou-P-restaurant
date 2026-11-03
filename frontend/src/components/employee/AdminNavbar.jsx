@@ -1,6 +1,6 @@
 import { NavLink, Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
-import { ShieldCheck, QrCode, LogOut, User, Utensils } from 'lucide-react';
+import { ShieldCheck, LogOut, User, Utensils } from 'lucide-react';
 
 export default function AdminNavbar() {
   const { user, logout } = useAuth();
@@ -24,14 +24,6 @@ export default function AdminNavbar() {
         >
           <ShieldCheck size={16} />
           <span>Panel Admin</span>
-        </NavLink>
-
-        <NavLink
-          to="/staff/qrs"
-          className={({ isActive }) => `staff-nav-item ${isActive ? 'active' : ''}`}
-        >
-          <QrCode size={16} />
-          <span>Generador de QRs</span>
         </NavLink>
 
         <Link

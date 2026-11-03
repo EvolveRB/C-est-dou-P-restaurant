@@ -165,6 +165,11 @@ export default function CookOrderModal({ table, mesa, onClose, onUpdateStatus })
                           <img
                             src={itemImg}
                             alt={name}
+                            onError={(e) => {
+                              if (itemImg.startsWith('/Imagenes/')) {
+                                e.currentTarget.src = itemImg.replace('/Imagenes/', '/');
+                              }
+                            }}
                             style={{ width: '40px', height: '40px', borderRadius: '8px', objectFit: 'cover' }}
                           />
                         ) : (

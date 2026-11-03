@@ -1,13 +1,14 @@
 import { useState } from 'react';
 import { useRestaurant } from '../../context/RestaurantContext';
 import CookOrderModal from '../../components/employee/CookOrderModal';
-import { EyeOff, Eye, Utensils } from 'lucide-react';
+import { EyeOff, Eye, Utensils, RotateCcw } from 'lucide-react';
 
 export default function EmployeeDashboardPage() {
-  const { tables, products, updateTableStatus, toggleProductAvailability } = useRestaurant();
+  const { tables, products, updateTableStatus, toggleProductAvailability, reiniciarEstadoPruebas } = useRestaurant();
   
   // Tab activa: 'pedidos' o 'inventario'
   const [activeTab, setActiveTab] = useState('pedidos');
+  const [resetting, setResetting] = useState(false);
   
   // Mesa seleccionada para abrir el popup
   const [selectedTable, setSelectedTable] = useState(null);
@@ -53,10 +54,36 @@ export default function EmployeeDashboardPage() {
           gap: '16px',
           borderBottom: '1px solid #F2E3D8'
         }}>
-          <div>
-            <h1 style={{ fontSize: '32px', fontWeight: 800, color: '#14171F', lineHeight: 1.15 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
+            <h1 style={{ fontSize: '32px', fontWeight: 800, color: '#14171F', lineHeight: 1.15, margin: 0 }}>
               {activeTab === 'pedidos' ? 'Pedidos' : 'Inventario'}
             </h1>
+            <button
+              onClick={async () => {
+                setResetting(true);
+                await reiniciarEstadoPruebas();
+                setResetting(false);
+              }}
+              disabled={resetting}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                backgroundColor: '#FFFFFF',
+                border: '1.5px solid var(--c-terracotta)',
+                color: 'var(--c-terracotta)',
+                padding: '6px 14px',
+                borderRadius: '10px',
+                fontSize: '12.5px',
+                fontWeight: 700,
+                cursor: 'pointer',
+                transition: 'all 0.15s ease'
+              }}
+              title="Limpia mesas y prepara el entorno: Mesa 2 esperando a elaboración y Mesa 1 libre para pedidos en tiempo real"
+            >
+              <RotateCcw size={13} style={{ transform: resetting ? 'rotate(180deg)' : 'none', transition: 'transform 0.4s ease' }} />
+              <span>{resetting ? 'Reiniciando...' : 'Reiniciar Pruebas (Mesa 2 en espera / Mesa 1 libre)'}</span>
+            </button>
           </div>
 
           {/* Selector de pestañas unificado */}
@@ -141,60 +168,123 @@ export default function EmployeeDashboardPage() {
               {/* Grilla PC de mesas */}
               <div style={{
                 display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))',
+                gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
                 gap: '18px',
                 flex: 1,
                 alignContent: 'start'
               }}>
                 {tables.map((mesa) => {
                   const hasOrder = mesa.pedido !== null && mesa.estado !== 'Libre';
+                  const orderItems = hasOrder && Array.isArray(mesa.pedido.items) ? mesa.pedido.items : [];
 
                   return (
-                    <button
+                    <div
                       key={mesa.id}
                       onClick={() => handleTableClick(mesa)}
                       style={{
-                        minHeight: '120px',
-                        borderRadius: '18px',
-                        backgroundColor: hasOrder ? '#EBBFB3' : '#FAF5F0',
-                        color: hasOrder ? '#4A151A' : '#736B63',
-                        border: hasOrder ? '1.5px solid #DCA99C' : '1px solid #E8DDD2',
-                        fontSize: '19px',
-                        fontWeight: hasOrder ? 800 : 600,
+                        minHeight: hasOrder ? '170px' : '100px',
+                        borderRadius: '20px',
+                        backgroundColor: hasOrder ? '#FFF9F6' : '#FAF5F0',
+                        color: '#1F242E',
+                        border: hasOrder ? '2px solid #DCA99C' : '1px solid #E8DDD2',
                         display: 'flex',
                         flexDirection: 'column',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        gap: '8px',
-                        padding: '16px',
+                        justifyContent: 'space-between',
+                        padding: '16px 18px',
                         cursor: hasOrder ? 'pointer' : 'default',
-                        transition: 'all 0.15s ease',
-                        boxShadow: hasOrder ? '0 6px 14px rgba(216, 107, 82, 0.22)' : 'none'
+                        transition: 'all 0.2s ease',
+                        boxShadow: hasOrder ? '0 6px 18px rgba(216, 107, 82, 0.16)' : 'none',
+                        textAlign: 'left'
                       }}
                       title={hasOrder ? `Ver comanda de Mesa ${mesa.id}` : `Mesa ${mesa.id} sin pedido`}
                     >
-                      <span style={{ fontSize: '20px', fontWeight: 800 }}>Mesa {mesa.id}</span>
+                      <div>
+                        {/* Cabecera de la mesa y estado */}
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                          <span style={{ fontSize: '20px', fontWeight: 800, color: '#1F242E' }}>
+                            Mesa {mesa.id}
+                          </span>
+                          {hasOrder ? (
+                            <span style={{
+                              fontSize: '11.5px',
+                              fontWeight: 700,
+                              backgroundColor: mesa.estado === 'Esperando' ? '#FEF3C7' : (mesa.estado === 'Listo para servir' || mesa.estado === 'Listo') ? '#DCFCE7' : '#FEE2E2',
+                              color: mesa.estado === 'Esperando' ? '#B45309' : (mesa.estado === 'Listo para servir' || mesa.estado === 'Listo') ? '#15803D' : '#B91C1C',
+                              padding: '3px 10px',
+                              borderRadius: '8px'
+                            }}>
+                              {mesa.estado === 'Esperando' ? 'Esperando comanda' : (mesa.estado === 'Listo para servir' || mesa.estado === 'Listo') ? '🍽️ Listo para servir' : 'En preparación'}
+                            </span>
+                          ) : (
+                            <span style={{
+                              fontSize: '12px',
+                              fontWeight: 500,
+                              color: '#9CA3AF'
+                            }}>
+                              Libre
+                            </span>
+                          )}
+                        </div>
+
+                        {/* Detalle de platos a elaborar si hay pedido */}
+                        {hasOrder && (
+                          <div style={{ marginTop: '8px' }}>
+                            <div style={{ fontSize: '11px', fontWeight: 800, color: 'var(--c-terracotta)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '6px' }}>
+                              Platos a elaborar ({orderItems.length}):
+                            </div>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '5px', maxHeight: '120px', overflowY: 'auto' }}>
+                              {orderItems.map((item, idx) => (
+                                <div
+                                  key={idx}
+                                  style={{
+                                    display: 'flex',
+                                    justifyContent: 'space-between',
+                                    alignItems: 'center',
+                                    fontSize: '13px',
+                                    background: '#FFFFFF',
+                                    padding: '6px 10px',
+                                    borderRadius: '10px',
+                                    border: '1px solid #F0E4D8'
+                                  }}
+                                >
+                                  <span style={{ fontWeight: 700, color: '#1F242E' }}>
+                                    {item.quantity || item.cantidad || 1}x {item.product?.nombre || item.nombre || 'Platillo'}
+                                  </span>
+                                  {item.note && (
+                                    <span style={{
+                                      fontSize: '11px',
+                                      color: 'var(--c-terracotta)',
+                                      fontStyle: 'italic',
+                                      maxWidth: '120px',
+                                      overflow: 'hidden',
+                                      textOverflow: 'ellipsis',
+                                      whiteSpace: 'nowrap'
+                                    }}>
+                                      "{item.note}"
+                                    </span>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
                       {hasOrder ? (
-                        <span style={{
-                          fontSize: '12px',
-                          fontWeight: 700,
-                          backgroundColor: mesa.estado === 'Esperando' ? '#FEF3C7' : (mesa.estado === 'Listo para servir' || mesa.estado === 'Listo') ? '#DCFCE7' : '#FEE2E2',
-                          color: mesa.estado === 'Esperando' ? '#B45309' : (mesa.estado === 'Listo para servir' || mesa.estado === 'Listo') ? '#15803D' : '#B91C1C',
-                          padding: '3px 10px',
-                          borderRadius: '8px'
-                        }}>
-                          {mesa.estado === 'Esperando' ? 'Esperando comanda' : (mesa.estado === 'Listo para servir' || mesa.estado === 'Listo') ? '🍽️ Listo para servir' : 'En preparación'}
-                        </span>
+                        <div style={{ marginTop: '12px', paddingTop: '8px', borderTop: '1px solid #F2E3D8', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <span style={{ fontSize: '11.5px', color: '#6B7280' }}>
+                            Hora: <strong>{mesa.pedido?.hora || '--:--'}</strong>
+                          </span>
+                          <span style={{ fontSize: '12px', fontWeight: 800, color: 'var(--c-burgundy-800)' }}>
+                            Ver Comanda →
+                          </span>
+                        </div>
                       ) : (
-                        <span style={{
-                          fontSize: '12px',
-                          fontWeight: 500,
-                          color: '#9CA3AF'
-                        }}>
-                          Libre
-                        </span>
+                        <div style={{ fontSize: '12px', color: '#9CA3AF', marginTop: '10px' }}>
+                          Mesa disponible
+                        </div>
                       )}
-                    </button>
+                    </div>
                   );
                 })}
               </div>
@@ -276,6 +366,7 @@ export default function EmployeeDashboardPage() {
                           <img
                             src={prod.imagen}
                             alt={prod.nombre}
+                            onError={(e) => { e.currentTarget.style.display = 'none'; }}
                             style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                           />
                         </div>

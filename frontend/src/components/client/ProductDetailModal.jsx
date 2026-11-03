@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { X, Clock, Plus, Minus, ChefHat, Ban, Tag } from 'lucide-react';
 import PlaceholderIcon from './PlaceholderIcon';
 import { formatPrice } from '../../data/initialProducts';
@@ -7,7 +7,24 @@ import { useCart } from '../../context/CartContext';
 export default function ProductDetailModal({ product, onClose }) {
   const [qty, setQty] = useState(1);
   const [notes, setNotes] = useState('');
+  const [imgError, setImgError] = useState(false);
+  const [currentSrc, setCurrentSrc] = useState(product?.imagen);
   const { addToCart } = useCart();
+
+  useEffect(() => {
+    setCurrentSrc(product?.imagen);
+    setImgError(false);
+  }, [product?.imagen]);
+
+  const handleImgError = () => {
+    if (currentSrc && currentSrc.startsWith('/Imagenes/')) {
+      setCurrentSrc(currentSrc.replace('/Imagenes/', '/'));
+    } else if (currentSrc && !currentSrc.startsWith('http') && !currentSrc.includes('localhost:8000')) {
+      setCurrentSrc(`http://localhost:8000${currentSrc.startsWith('/') ? '' : '/'}${currentSrc}`);
+    } else {
+      setImgError(true);
+    }
+  };
 
   if (!product) return null;
 
@@ -86,10 +103,11 @@ export default function ProductDetailModal({ product, onClose }) {
               <span>Plato no disponible / Agotado</span>
             </div>
           )}
-          {product.imagen ? (
+          {currentSrc && !imgError ? (
             <img
-              src={product.imagen}
+              src={currentSrc}
               alt={product.nombre}
+              onError={handleImgError}
               style={{ width: '100%', height: '100%', objectFit: 'cover' }}
             />
           ) : (

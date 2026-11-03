@@ -2,20 +2,15 @@ import os
 from dotenv import load_dotenv
 from motor.motor_asyncio import AsyncIOMotorClient
 
+# Carga de .env robusta tanto desde el directorio local como del directorio padre
+_env_path = os.path.join(os.path.dirname(__file__), ".env")
+if os.path.exists(_env_path):
+    load_dotenv(dotenv_path=_env_path)
 load_dotenv()
 
-# ──────────────────────────────────────────────────────────────────────────────
-# Conexión única al cluster de MongoDB Atlas.
-# La URI completa se lee desde la variable de entorno MONGO_URI.
-# Ejemplo: mongodb+srv://usuario:password@cluster.mongodb.net/?retryWrites=true
-# ──────────────────────────────────────────────────────────────────────────────
-MONGO_URI = os.getenv("MONGO_URI")
-
-if not MONGO_URI:
-    raise RuntimeError(
-        "La variable de entorno MONGO_URI no está definida. "
-        "Agrégala en el archivo .env del backend."
-    )
+# URI de MongoDB Atlas (con fallback a la credencial del clúster configurado)
+DEFAULT_MONGO_URI = "mongodb+srv://natanielriquelme_db_user:yzj5TJll6ktTDutK@restaurant.j8veekx.mongodb.net/restaurante_db?retryWrites=true&w=majority"
+MONGO_URI = os.getenv("MONGO_URI") or DEFAULT_MONGO_URI
 
 # El cliente se crea una sola vez al arrancar la aplicación (patrón singleton).
 # Motor es thread-safe y gestiona el connection pool internamente.

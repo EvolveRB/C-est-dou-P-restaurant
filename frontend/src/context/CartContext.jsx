@@ -4,7 +4,7 @@ import { useRestaurant } from './RestaurantContext';
 const CartContext = createContext(null);
 
 export function CartProvider({ children }) {
-  const { tables, submitOrderForTable, resetTable, llamarGarzon } = useRestaurant();
+  const { tables, submitOrderForTable, resetTable, llamarGarzon, reiniciarEstadoPruebas } = useRestaurant();
 
   // ──────────────────────────────────────────────────────────────────────────
   // Estado: número de mesa activa (leído del QR)
@@ -167,7 +167,7 @@ export function CartProvider({ children }) {
         await resetTable(tableNumber);
       }
     }
-    showToast('Mesa lista para un nuevo pedido');
+    showToast(`Mesa ${tableNumber} liberada y limpia`);
   };
 
   // ──────────────────────────────────────────────────────────────────────────
@@ -184,6 +184,15 @@ export function CartProvider({ children }) {
     try {
       const newOrder = await submitOrderForTable(tableNumber, cart, customNotes);
       setLastSubmittedOrder(newOrder);
+      // Limpiar el carrito local para que los nuevos platos agregados
+      // aparezcan en una nueva sección editable más abajo
+      clearCart();
+      try {
+        localStorage.removeItem('carrito_cest_dou_p');
+        if (tableNumber) {
+          localStorage.removeItem(`carrito_cest_dou_p_mesa_${tableNumber}`);
+        }
+      } catch {}
       showToast('✅ Pedido enviado a cocina con éxito');
       return newOrder;
     } catch (err) {
@@ -250,6 +259,7 @@ export function CartProvider({ children }) {
         removeFromCart,
         clearCart,
         resetActiveTable,
+        reiniciarEstadoPruebas,
         sendOrder,
         solicitarGarzon,
         callingWaiter,

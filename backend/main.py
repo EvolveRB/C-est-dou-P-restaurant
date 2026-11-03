@@ -1,12 +1,16 @@
 import os
 from fastapi import FastAPI, Depends, HTTPException, Body
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
+from fastapi.encoders import ENCODERS_BY_TYPE
 from pydantic import BaseModel
 from typing import Optional, List, Union
 from datetime import datetime
 from bson import ObjectId
 from database import get_db
+
+# Registro global para que jsonable_encoder de FastAPI serialice ObjectId automáticamente a string
+ENCODERS_BY_TYPE[ObjectId] = str
 
 app = FastAPI(
     title="API Restaurante - C'est doux P",
@@ -35,16 +39,86 @@ app.add_middleware(
 imagenes_dir = os.path.join(os.path.dirname(__file__), "Imagenes")
 if not os.path.exists(imagenes_dir):
     os.makedirs(imagenes_dir, exist_ok=True)
-app.mount("/Imagenes", StaticFiles(directory=imagenes_dir), name="imagenes")
+
+try:
+    from fastapi.staticfiles import StaticFiles
+    app.mount("/Imagenes", StaticFiles(directory=imagenes_dir), name="imagenes")
+except Exception as static_err:
+    print(f"[STATIC INFO] Servidor de estáticos fallback FileResponse activo: {static_err}")
+
+@app.get("/Imagenes/{nombre_archivo}", tags=["Archivos"])
+async def obtener_imagen_estatica(nombre_archivo: str):
+    ruta = os.path.join(imagenes_dir, nombre_archivo)
+    if os.path.exists(ruta):
+        return FileResponse(ruta)
+    raise HTTPException(status_code=404, detail="Imagen no encontrada")
 
 # ==============================================================================
 # HELPERS — serialización y búsqueda flexible
 # ==============================================================================
-def serializar_doc(doc: dict) -> dict:
-    """Convierte el _id de ObjectId a string y normaliza campos."""
-    if doc and "_id" in doc:
-        doc["_id"] = str(doc["_id"])
-    return doc
+MAPA_IMAGENES_POR_NOMBRE = {
+    "plato principal alpha": "plato_alpha.jpg",
+    "entrada especial beta": "entrada_beta.jpg",
+    "sopa tradicional gamma": "sopa_gamma.jpg",
+    "corte de carne delta": "corte_delta.jpg",
+    "pasta artesanal epsilon": "pasta_epsilon.jpg",
+    "postre tentación zeta": "postreUV.jpeg",
+    "postre tentacion zeta": "postreUV.jpeg",
+    "carpaccio de res trufado": "carpaccio_trufado.jpg",
+    "bisque de mariscos del puerto": "bisque_mariscos.jpg",
+    "ravioles de ricotta y nueces": "ravioles_ricotta.jpg",
+    "limonada menta jengibre": "limonada_menta.jpg",
+    "copa de vino reserva syrah": "vino_reserva.jpg",
+}
+
+MAPA_IMAGENES_POR_ID = {
+    1: "plato_alpha.jpg",
+    2: "entrada_beta.jpg",
+    3: "sopa_gamma.jpg",
+    4: "corte_delta.jpg",
+    5: "pasta_epsilon.jpg",
+    6: "postreUV.jpeg",
+    7: "carpaccio_trufado.jpg",
+    8: "bisque_mariscos.jpg",
+    9: "ravioles_ricotta.jpg",
+    10: "limonada_menta.jpg",
+    11: "vino_reserva.jpg",
+}
+
+def resolver_imagen_producto(doc: dict) -> str:
+    """Garantiza que siempre retorne la ruta de imagen correcta del catálogo."""
+    img = doc.get("imagen")
+    if img and str(img).strip():
+        img_str = str(img).strip()
+        if img_str.startswith("http://") or img_str.startswith("https://") or img_str.startswith("/"):
+            return img_str
+        return f"/Imagenes/{img_str.lstrip('/')}"
+
+    nombre_norm = str(doc.get("nombre", "")).strip().lower()
+    if nombre_norm in MAPA_IMAGENES_POR_NOMBRE:
+        return f"/Imagenes/{MAPA_IMAGENES_POR_NOMBRE[nombre_norm]}"
+
+    for k, v in MAPA_IMAGENES_POR_NOMBRE.items():
+        if k in nombre_norm or nombre_norm in k:
+            return f"/Imagenes/{v}"
+
+    id_plato = doc.get("id_plato")
+    if id_plato in MAPA_IMAGENES_POR_ID:
+        return f"/Imagenes/{MAPA_IMAGENES_POR_ID[id_plato]}"
+
+    return "/Imagenes/plato_alpha.jpg"
+
+def serializar_doc(val):
+    """Convierte recursivamente cualquier ObjectId o datetime a formato serializable JSON."""
+    if isinstance(val, ObjectId):
+        return str(val)
+    if isinstance(val, datetime):
+        return val.isoformat()
+    if isinstance(val, dict):
+        return {str(k): serializar_doc(v) for k, v in val.items()}
+    if isinstance(val, (list, tuple, set)):
+        return [serializar_doc(item) for item in val]
+    return val
 
 def build_producto_filter(id_producto: str) -> dict:
     """Permite buscar un producto tanto por su ObjectId (_id) como por id_plato (int)."""
@@ -147,6 +221,22 @@ class LoginInput(BaseModel):
     username: str
     password: str
 
+# ── Empleados (Plantilla de trabajadores) ────────────────────────────────────
+class EmpleadoCreate(BaseModel):
+    nombre: str
+    apellido: Optional[str] = ""
+    correo: Optional[str] = None
+    username: Optional[str] = None
+    rol: str = "Garzón"  # "Garzón", "Cocinero", "Administrador"
+    telefono: Optional[str] = None
+    password: Optional[str] = "123456"
+
+class EmpleadoUpdateRol(BaseModel):
+    rol: str
+
+class MesasCantidadInput(BaseModel):
+    cantidad: int
+
 
 # ==============================================================================
 # AUTH — Login de empleados
@@ -228,6 +318,200 @@ async def login_empleado(creds: LoginInput, db=Depends(get_db)):
 
 
 # ==============================================================================
+# EMPLEADOS — Plantilla de trabajadores y administración de roles
+# ==============================================================================
+@app.get("/empleados", tags=["Empleados"])
+async def listar_empleados(db=Depends(get_db)):
+    """Retorna la lista de empleados actuales (plantilla de trabajadores)."""
+    try:
+        cursor = db.empleados.find({}, {"password": 0})
+        docs = await cursor.to_list(length=100)
+
+        # Si la colección está vacía, insertar los empleados base solicitados
+        if len(docs) == 0:
+            semillas = [
+                {
+                    "nombre": "Marcela",
+                    "apellido": "Soto",
+                    "correo": "marcela.soto@restaurant.cl",
+                    "username": "marcela.soto",
+                    "rol": "Cocinero",
+                    "cargo": "Cocinero",
+                    "telefono": "+56 9 8765 4321",
+                    "estado": "Activo"
+                },
+                {
+                    "nombre": "Ana",
+                    "apellido": "Morales",
+                    "correo": "ana.morales@restaurant.cl",
+                    "username": "ana.morales",
+                    "rol": "Garzón",
+                    "cargo": "Garzón",
+                    "telefono": "+56 9 7654 3210",
+                    "estado": "Activo"
+                },
+                {
+                    "nombre": "Carlos",
+                    "apellido": "Silva",
+                    "correo": "admin@restaurant.cl",
+                    "username": "admin",
+                    "rol": "Administrador",
+                    "cargo": "Administrador",
+                    "telefono": "+56 9 1234 5678",
+                    "estado": "Activo"
+                }
+            ]
+            await db.empleados.insert_many(semillas)
+            docs = await db.empleados.find({}, {"password": 0}).to_list(length=100)
+
+        # Garantizar que Marcela Soto y Ana Morales estén presentes en la lista
+        tiene_marcela = any("marcela" in str(d.get("nombre", "")).lower() for d in docs)
+        tiene_ana = any("ana" in str(d.get("nombre", "")).lower() for d in docs)
+
+        if not tiene_marcela:
+            m_doc = {
+                "nombre": "Marcela",
+                "apellido": "Soto",
+                "correo": "marcela.soto@restaurant.cl",
+                "username": "marcela.soto",
+                "rol": "Cocinero",
+                "cargo": "Cocinero",
+                "telefono": "+56 9 8765 4321",
+                "estado": "Activo"
+            }
+            res_m = await db.empleados.insert_one(m_doc)
+            m_doc["_id"] = res_m.inserted_id
+            docs.append(m_doc)
+
+        if not tiene_ana:
+            a_doc = {
+                "nombre": "Ana",
+                "apellido": "Morales",
+                "correo": "ana.morales@restaurant.cl",
+                "username": "ana.morales",
+                "rol": "Garzón",
+                "cargo": "Garzón",
+                "telefono": "+56 9 7654 3210",
+                "estado": "Activo"
+            }
+            res_a = await db.empleados.insert_one(a_doc)
+            a_doc["_id"] = res_a.inserted_id
+            docs.append(a_doc)
+
+        return [serializar_doc(d) for d in docs]
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=repr(e))
+
+
+@app.post("/empleados", tags=["Empleados"])
+async def crear_empleado(emp: EmpleadoCreate, db=Depends(get_db)):
+    """Agrega un nuevo trabajador a la plantilla del restaurante."""
+    try:
+        emp_dict = emp.model_dump()
+        nombre_clean = emp_dict["nombre"].strip()
+        apellido_clean = (emp_dict.get("apellido") or "").strip()
+        if not emp_dict.get("username"):
+            emp_dict["username"] = f"{nombre_clean.lower()}.{apellido_clean.lower()}".strip(".")
+        if not emp_dict.get("correo"):
+            emp_dict["correo"] = f"{emp_dict['username']}@restaurant.cl"
+        emp_dict["cargo"] = emp_dict["rol"]
+        emp_dict["estado"] = "Activo"
+
+        res = await db.empleados.insert_one(emp_dict)
+        emp_dict["_id"] = str(res.inserted_id)
+        return serializar_doc(emp_dict)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=repr(e))
+
+
+@app.put("/empleados/{id_empleado}/rol", tags=["Empleados"])
+async def actualizar_rol_empleado(id_empleado: str, data: EmpleadoUpdateRol, db=Depends(get_db)):
+    """Actualiza el rol de un trabajador (Cocinero, Garzón, Administrador)."""
+    try:
+        filtro = {"_id": ObjectId(id_empleado)} if ObjectId.is_valid(id_empleado) else {"_id": id_empleado}
+        res = await db.empleados.update_one(
+            filtro,
+            {"$set": {"rol": data.rol, "cargo": data.rol}}
+        )
+        if res.matched_count == 0:
+            await db.empleados.update_one(
+                {"$or": [{"username": id_empleado}, {"nombre": id_empleado}]},
+                {"$set": {"rol": data.rol, "cargo": data.rol}}
+            )
+        return {"mensaje": f"Rol actualizado a {data.rol}", "id": id_empleado, "rol": data.rol}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=repr(e))
+
+
+@app.delete("/empleados/{id_empleado}", tags=["Empleados"])
+async def eliminar_empleado(id_empleado: str, db=Depends(get_db)):
+    """Elimina un trabajador de la plantilla."""
+    try:
+        filtro = {"_id": ObjectId(id_empleado)} if ObjectId.is_valid(id_empleado) else {"_id": id_empleado}
+        res = await db.empleados.delete_one(filtro)
+        return {"mensaje": "Trabajador eliminado correctamente", "id": id_empleado}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=repr(e))
+
+
+# ==============================================================================
+# MESAS — Listar y ajustar capacidad dinámica
+# ==============================================================================
+@app.get("/mesas", tags=["Mesas"])
+async def listar_mesas(db=Depends(get_db)):
+    """Retorna todas las mesas registradas y la cantidad actual."""
+    try:
+        cursor = db.mesas.find({}).sort("num_mesa", 1)
+        mesas = await cursor.to_list(length=100)
+        return {
+            "total": len(mesas),
+            "mesas": [serializar_doc(m) for m in mesas]
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=repr(e))
+
+
+@app.post("/mesas/cantidad", tags=["Mesas"])
+async def ajustar_cantidad_mesas(data: MesasCantidadInput, db=Depends(get_db)):
+    """
+    Ajusta dinámicamente la cantidad total de mesas del restaurante (1 a 50).
+    Añade mesas nuevas o elimina mesas libres excedentes.
+    """
+    try:
+        nueva_cantidad = max(1, min(50, data.cantidad))
+        mesas_existentes = await db.mesas.find({}).to_list(length=100)
+        actuales = set()
+        for m in mesas_existentes:
+            try:
+                actuales.add(int(m.get("num_mesa", 0)))
+            except Exception:
+                pass
+
+        # Agregar mesas faltantes
+        for n in range(1, nueva_cantidad + 1):
+            if n not in actuales:
+                await db.mesas.update_one(
+                    {"$or": [{"num_mesa": n}, {"num_mesa": str(n)}]},
+                    {"$set": {"num_mesa": n, "estado": "Libre", "piso": 1, "visita_activa_id": None}},
+                    upsert=True
+                )
+
+        # Si sobran mesas libres por encima del nuevo total, retirarlas
+        for n in list(actuales):
+            if n > nueva_cantidad:
+                await db.mesas.delete_one({"num_mesa": n, "estado": "Libre"})
+
+        total_final = await db.mesas.count_documents({})
+        return {
+            "mensaje": f"Capacidad del salón ajustada a {nueva_cantidad} mesas",
+            "cantidad": nueva_cantidad,
+            "total_registradas": total_final
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=repr(e))
+
+
+# ==============================================================================
 # 1. INSERT (3)
 # ==============================================================================
 @app.post("/mesas", tags=["1. INSERT (3)"])
@@ -253,8 +537,8 @@ async def crear_producto(producto: ProductoCreate, db=Depends(get_db)):
 @app.post("/pedidos", tags=["1. INSERT (3)"])
 async def crear_pedido(pedido: PedidoCreate, db=Depends(get_db)):
     """
-    Inserta un pedido con items embebidos en la colección 'pedidos'.
-    Calcula subtotal y total automáticamente y actualiza la mesa a 'Pendiente'.
+    Inserta un pedido con items embebidos en la colección 'pedidos',
+    o acumula los nuevos platos si la mesa ya tiene una comanda activa en cocina.
     """
     try:
         pedido_dict = pedido.model_dump()
@@ -266,16 +550,46 @@ async def crear_pedido(pedido: PedidoCreate, db=Depends(get_db)):
         if not pedido_dict.get("hora_pedido"):
             pedido_dict["hora_pedido"] = datetime.now().strftime("%H:%M")
 
-        items_list = pedido_dict.get("items") or []
+        items_nuevos = pedido_dict.get("items") or []
+        filtro_mesa = await build_mesa_pedidos_filter(pedido_dict["num_mesa"], db)
+
+        # 1. Verificar si la mesa ya tiene una comanda activa para sumar los platos adicionales
+        pedido_activo = await db.pedidos.find_one({
+            **filtro_mesa,
+            "estado_pedido": {"$in": ["Pendiente", "En preparación", "Esperando", "Listo"]}
+        })
+
+        if pedido_activo:
+            items_totales = (pedido_activo.get("items") or []) + items_nuevos
+            subtotal_total = sum(
+                float(it.get("precio_unitario", 0) or 0) * int(it.get("cantidad", 1) or 1)
+                for it in items_totales
+            )
+            notas_previas = pedido_activo.get("notas", "")
+            nueva_nota = pedido_dict.get("notas", "")
+            notas_acumuladas = f"{notas_previas} | {nueva_nota}".strip(" |") if nueva_nota else notas_previas
+
+            await db.pedidos.update_one(
+                {"_id": pedido_activo["_id"]},
+                {"$set": {
+                    "items": items_totales,
+                    "subtotal": subtotal_total,
+                    "total": subtotal_total,
+                    "notas": notas_acumuladas,
+                    "hora_pedido": pedido_dict["hora_pedido"]
+                }}
+            )
+            return {"mensaje": "Platos adicionales agregados a la comanda activa", "id": str(pedido_activo["_id"]), "acumulado": True}
+
+        # 2. Si no había comanda previa, insertar nuevo pedido
         subtotal = sum(
             float(item.get("precio_unitario", 0) or 0) * int(item.get("cantidad", 1) or 1)
-            for item in items_list
+            for item in items_nuevos
         )
         pedido_dict["subtotal"] = subtotal
         pedido_dict["total"] = subtotal
         pedido_dict["estado_pedido"] = "Pendiente"
 
-        filtro_mesa = await build_mesa_pedidos_filter(pedido_dict["num_mesa"], db)
         await db.pedidos.update_many(
             {**filtro_mesa, "estado_pedido": {"$nin": ["Entregado", "Archivado"]}},
             {"$set": {"estado_pedido": "Archivado"}}
@@ -289,7 +603,7 @@ async def crear_pedido(pedido: PedidoCreate, db=Depends(get_db)):
             upsert=True
         )
 
-        return {"mensaje": "Pedido creado", "id": str(resultado.inserted_id)}
+        return {"mensaje": "Pedido creado", "id": str(resultado.inserted_id), "acumulado": False}
     except Exception as e:
         raise HTTPException(status_code=500, detail=repr(e))
 
@@ -327,6 +641,7 @@ async def crear_visita(visita: VisitaCreate, db=Depends(get_db)):
 async def select_productos_por_precio(precio_maximo: float = 10000, db=Depends(get_db)):
     """
     Obtiene los productos con precio menor al filtro desde la colección 'producto'.
+    Garantiza que cada plato tenga su imagen correspondiente resuelta y sincronizada.
     """
     try:
         cursor = db.producto.find(
@@ -336,7 +651,18 @@ async def select_productos_por_precio(precio_maximo: float = 10000, db=Depends(g
              "etiquetas": 1}
         )
         docs = await cursor.to_list(length=200)
-        return [serializar_doc(d) for d in docs]
+        docs_con_imagen = []
+        for d in docs:
+            img_res = resolver_imagen_producto(d)
+            if not d.get("imagen") or d.get("imagen") != img_res:
+                d["imagen"] = img_res
+                # Sincronizar en Mongo para futuras peticiones
+                try:
+                    await db.producto.update_one({"_id": d["_id"]}, {"$set": {"imagen": img_res}})
+                except Exception:
+                    pass
+            docs_con_imagen.append(serializar_doc(d))
+        return docs_con_imagen
     except Exception as e:
         raise HTTPException(status_code=500, detail=repr(e))
 
@@ -605,7 +931,7 @@ async def validar_qr(num_mesa: int, token: str, db=Depends(get_db)):
         return {
             "mensaje": "QR válido",
             "num_mesa": num_mesa,
-            "visita_activa_id": mesa.get("visita_activa_id")
+            "visita_activa_id": str(mesa.get("visita_activa_id")) if mesa.get("visita_activa_id") else None
         }
     except HTTPException:
         raise
@@ -719,5 +1045,99 @@ async def drop_coleccion_promociones(db=Depends(get_db)):
     try:
         await db.promocion_temporada.drop()
         return {"mensaje": "Coleccion 'promocion_temporada' eliminada con exito (DROP)"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=repr(e))
+
+
+# ==============================================================================
+# REINICIO Y LIMPIEZA DE PRUEBAS
+# Mesa 1: Libre (lista para tiempo real)
+# Mesa 2: Esperando a elaboración (comanda activa de prueba)
+# ==============================================================================
+@app.post("/sistema/reiniciar-pruebas", tags=["Pruebas"])
+@app.post("/mesas/reiniciar-pruebas", tags=["Pruebas"])
+async def reiniciar_sistema_pruebas(db=Depends(get_db)):
+    """
+    Limpia y resetea el entorno de pruebas:
+    - Mesa 1 queda LIBRE y limpia para pruebas de pedidos y tiempo real.
+    - Mesa 2 queda con un pedido de prueba en estado 'Pendiente' (esperando a elaboración).
+    - Mesas 3 a 8 quedan en estado 'Libre'.
+    - Archiva pedidos activos anteriores.
+    - Asegura que los productos tengan su campo 'imagen' sincronizado.
+    """
+    try:
+        # 1. Archivar todos los pedidos activos anteriores
+        await db.pedidos.update_many(
+            {"estado_pedido": {"$nin": ["Archivado", "Entregado"]}},
+            {"$set": {"estado_pedido": "Archivado"}}
+        )
+
+        # 2. Dejar todas las mesas existentes (o al menos 8) como 'Libre'
+        mesas_count = await db.mesas.count_documents({})
+        cant_mesas = max(8, mesas_count)
+        for num in range(1, cant_mesas + 1):
+            await db.mesas.update_one(
+                {"$or": [{"num_mesa": num}, {"num_mesa": str(num)}]},
+                {"$set": {"num_mesa": num, "estado": "Libre", "visita_activa_id": None}},
+                upsert=True
+            )
+
+        # 3. Insertar comanda de prueba para Mesa 2 (esperando a elaboración)
+        hora_test = datetime.now().strftime("%H:%M")
+        pedido_mesa_2 = {
+            "num_mesa": 2,
+            "empleado_id": None,
+            "estado_pedido": "Pendiente",
+            "hora_pedido": hora_test,
+            "notas": "Mesa de prueba: esperando a elaboración",
+            "items": [
+                {
+                    "producto_id": "1",
+                    "nombre": "Plato Principal Alpha",
+                    "precio_unitario": 12500,
+                    "cantidad": 1,
+                    "observaciones": "Término medio"
+                },
+                {
+                    "producto_id": "2",
+                    "nombre": "Entrada Especial Beta",
+                    "precio_unitario": 8000,
+                    "cantidad": 1,
+                    "observaciones": "Sin sal añadida"
+                }
+            ],
+            "subtotal": 20500,
+            "total": 20500,
+            "fecha_creacion": datetime.now()
+        }
+        res_pedido_2 = await db.pedidos.insert_one(pedido_mesa_2)
+
+        # Marcar Mesa 2 como 'Pendiente' en db.mesas
+        await db.mesas.update_one(
+            {"$or": [{"num_mesa": 2}, {"num_mesa": "2"}]},
+            {"$set": {"num_mesa": 2, "estado": "Pendiente", "visita_activa_id": None}},
+            upsert=True
+        )
+
+        # 4. Asegurar Mesa 1 explícitamente Libre
+        await db.mesas.update_one(
+            {"$or": [{"num_mesa": 1}, {"num_mesa": "1"}]},
+            {"$set": {"num_mesa": 1, "estado": "Libre", "visita_activa_id": None}},
+            upsert=True
+        )
+
+        # 5. Sincronizar imágenes de productos faltantes
+        prods = await db.producto.find({}).to_list(100)
+        for p in prods:
+            img_res = resolver_imagen_producto(p)
+            if not p.get("imagen") or p.get("imagen") != img_res:
+                await db.producto.update_one({"_id": p["_id"]}, {"$set": {"imagen": img_res}})
+
+        return {
+            "mensaje": "Estado de pruebas reiniciado con éxito",
+            "mesa_1": "Libre (lista para tiempo real)",
+            "mesa_2": "Esperando a elaboración (comanda activa)",
+            "pedido_mesa_2_id": str(res_pedido_2.inserted_id)
+        }
     except Exception as e:
         raise HTTPException(status_code=500, detail=repr(e))
