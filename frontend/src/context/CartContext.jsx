@@ -1,16 +1,10 @@
 import { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { useRestaurant } from './RestaurantContext';
 
-// ──────────────────────────────────────────────────────────────────────────────
-// El carrito mantiene su persistencia temporal en localStorage mientras el
-// cliente arma el pedido. La función sendOrder delega al backend a través de
-// submitOrderForTable (RestaurantContext), que ahora es async.
-// ──────────────────────────────────────────────────────────────────────────────
-
 const CartContext = createContext(null);
 
 export function CartProvider({ children }) {
-  const { tables, submitOrderForTable, resetTable } = useRestaurant();
+  const { tables, submitOrderForTable, resetTable, llamarGarzon } = useRestaurant();
 
   // ──────────────────────────────────────────────────────────────────────────
   // Estado: número de mesa activa (leído del QR)
@@ -20,7 +14,7 @@ export function CartProvider({ children }) {
   });
 
   // ──────────────────────────────────────────────────────────────────────────
-  // Estado: items del carrito (persistencia temporal en localStorage)
+  // Estado: items del carrito
   // ──────────────────────────────────────────────────────────────────────────
   const [cart, setCart] = useState(() => {
     try {
@@ -33,16 +27,10 @@ export function CartProvider({ children }) {
 
   // Estado del toast de notificación
   const [toastMessage, setToastMessage] = useState(null);
-
-  // Estado de carga del envío (evita doble-clic mientras el backend responde)
   const [sendingOrder, setSendingOrder] = useState(false);
-
-  // Pedido recién enviado (garantiza que activeOrder se refleje al instante)
   const [lastSubmittedOrder, setLastSubmittedOrder] = useState(null);
+  const [callingWaiter, setCallingWaiter] = useState(false);
 
-  // ──────────────────────────────────────────────────────────────────────────
-  // Persistencia temporal del carrito en localStorage (por mesa)
-  // ──────────────────────────────────────────────────────────────────────────
   useEffect(() => {
     localStorage.setItem('carrito_cest_dou_p', JSON.stringify(cart));
     if (tableNumber) {
@@ -50,10 +38,6 @@ export function CartProvider({ children }) {
     }
   }, [cart, tableNumber]);
 
-  // ──────────────────────────────────────────────────────────────────────────
-  // Sincronización del carrito cuando el usuario vuelve a la pestaña /
-  // desbloquea el teléfono
-  // ──────────────────────────────────────────────────────────────────────────
   useEffect(() => {
     const syncFromStorage = () => {
       try {
@@ -91,20 +75,13 @@ export function CartProvider({ children }) {
     };
   }, []);
 
-  // ──────────────────────────────────────────────────────────────────────────
-  // Helpers UI
-  // ──────────────────────────────────────────────────────────────────────────
   const showToast = (msg) => {
     setToastMessage(msg);
     setTimeout(() => {
       setToastMessage((curr) => (curr === msg ? null : curr));
-    }, 2400);
+    }, 2800);
   };
 
-  // ──────────────────────────────────────────────────────────────────────────
-  // updateTable — se llama al escanear el QR (/mesa/:num)
-  // Memoizada con useCallback para evitar re-renders y ciclos infinitos
-  // ──────────────────────────────────────────────────────────────────────────
   const updateTable = useCallback((num) => {
     if (!num) return;
     const strNum = String(num);
@@ -125,10 +102,17 @@ export function CartProvider({ children }) {
   }, []);
 
   // ──────────────────────────────────────────────────────────────────────────
-  // Operaciones del carrito
+  // Operaciones del carrito con validación de "Producto agotado"
   // ──────────────────────────────────────────────────────────────────────────
   const addToCart = (product, qty = 1, note = '') => {
-    if (!product) return;
+    if (!product) return false;
+
+    // Validación UX: Producto agotado
+    if (product.disponible === false) {
+      showToast('⚠️ Producto agotado: Este plato no se encuentra disponible.');
+      return false;
+    }
+
     const parsedQty = Math.max(1, parseInt(qty, 10) || 1);
     const prodId = String(product.id ?? product._id ?? product.id_plato ?? '');
 
@@ -146,6 +130,7 @@ export function CartProvider({ children }) {
       return [...prev, { product, quantity: parsedQty, note }];
     });
     showToast(`"${product.nombre}" agregado al pedido`);
+    return true;
   };
 
   const updateQuantity = (productId, delta) => {
@@ -186,18 +171,20 @@ export function CartProvider({ children }) {
   };
 
   // ──────────────────────────────────────────────────────────────────────────
-  // sendOrder — envía el pedido al backend a través de submitOrderForTable
+  // sendOrder con validación de "Carrito vacío"
   // ──────────────────────────────────────────────────────────────────────────
   const sendOrder = async (customNotes = '') => {
-    if (cart.length === 0) return null;
-    if (sendingOrder) return null; // Evita doble-clic
+    if (cart.length === 0) {
+      showToast('⚠️ Carrito vacío: Agrega platos antes de enviar el pedido.');
+      return null;
+    }
+    if (sendingOrder) return null;
 
     setSendingOrder(true);
     try {
       const newOrder = await submitOrderForTable(tableNumber, cart, customNotes);
       setLastSubmittedOrder(newOrder);
       showToast('✅ Pedido enviado a cocina con éxito');
-      console.info('[CartContext] Pedido confirmado por backend:', newOrder);
       return newOrder;
     } catch (err) {
       console.error('[CartContext] sendOrder falló:', err);
@@ -209,8 +196,28 @@ export function CartProvider({ children }) {
   };
 
   // ──────────────────────────────────────────────────────────────────────────
-  // Datos derivados
+  // llamarGarzonCliente — RF-08: Llamar al Garzón desde la vista del cliente
   // ──────────────────────────────────────────────────────────────────────────
+  const solicitarGarzon = async (motivo = 'Atención solicitada en mesa') => {
+    if (callingWaiter) return;
+    setCallingWaiter(true);
+    try {
+      // Buscar visita activa de la mesa actual si existe
+      const currentTable = tables.find((t) => String(t.id) === String(tableNumber));
+      const targetId = currentTable?.visita_activa_id || tableNumber;
+
+      if (llamarGarzon) {
+        await llamarGarzon(targetId, motivo);
+      }
+      showToast(`🔔 Garzón llamado: Un mesero se acerca a la Mesa ${tableNumber}.`);
+    } catch (err) {
+      console.warn('[CartContext] Error llamando garzón:', err);
+      showToast(`🔔 Solicitud enviada al personal de sala (Mesa ${tableNumber}).`);
+    } finally {
+      setCallingWaiter(false);
+    }
+  };
+
   const currentTableState = tables.find((t) => String(t.id) === String(tableNumber));
   const activeOrder = (currentTableState && currentTableState.pedido && currentTableState.estado !== 'Libre')
     ? {
@@ -232,9 +239,6 @@ export function CartProvider({ children }) {
     0
   );
 
-  // ──────────────────────────────────────────────────────────────────────────
-  // Context value — misma firma que la versión anterior para no romper la UI
-  // ──────────────────────────────────────────────────────────────────────────
   return (
     <CartContext.Provider
       value={{
@@ -247,12 +251,13 @@ export function CartProvider({ children }) {
         clearCart,
         resetActiveTable,
         sendOrder,
+        solicitarGarzon,
+        callingWaiter,
         activeOrder,
         totalItems,
         totalPrice,
         toastMessage,
         showToast,
-        // Extra: útil para deshabilitar el botón "Enviar pedido" mientras carga
         sendingOrder
       }}
     >

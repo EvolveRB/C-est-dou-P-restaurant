@@ -14,13 +14,28 @@ const RestaurantContext = createContext(null);
 // ──────────────────────────────────────────────────────────────────────────────
 
 /**
+ * Resuelve la URL absoluta para imágenes almacenadas localmente en backend/Imagenes
+ * o URLs remotas (HTTP / HTTPS / Base64).
+ */
+function formatImageUrl(img) {
+  if (!img) return null;
+  if (img.startsWith('http://') || img.startsWith('https://') || img.startsWith('data:')) {
+    return img;
+  }
+  const cleanPath = img.replace(/^\/+/, '');
+  if (cleanPath.toLowerCase().startsWith('imagenes/')) {
+    return `${API_URL}/${cleanPath}`;
+  }
+  return `${API_URL}/Imagenes/${cleanPath}`;
+}
+
+/**
  * Convierte un array de pedidos del backend [{ _id, num_mesa, estado_pedido, hora_pedido }]
  * al array de mesas { id, estado, pedido } que usa la UI.
  * Con MongoDB el campo `_id` ya viene serializado como string desde el backend.
  * Las mesas sin pedido activo se incluyen como 'Libre'.
  */
 function normalizeMesas(pedidosBackend, totalMesas = 8) {
-  // Mapa de num_mesa (entero) → último pedido activo
   const pedidosPorMesa = {};
   for (const p of pedidosBackend) {
     if (p.num_mesa != null) {
@@ -47,20 +62,22 @@ function normalizeMesas(pedidosBackend, totalMesas = 8) {
       const prodId = it.product?.id || it.producto_id || it.id || it._id || 'item';
       const qty = Math.max(1, parseInt(it.quantity ?? it.cantidad ?? 1, 10));
       const note = it.note || it.observaciones || it.notas || '';
+      const rawImg = it.product?.imagen || it.imagen;
       return {
         product: {
           id: prodId,
           nombre: prodName,
-          precio: prodPrice
+          precio: prodPrice,
+          imagen: formatImageUrl(rawImg)
         },
         quantity: qty,
         note: note,
-        // Propiedades planas para máxima compatibilidad con cualquier vista
         nombre: prodName,
         precio: prodPrice,
         precio_unitario: prodPrice,
         cantidad: qty,
-        observaciones: note
+        observaciones: note,
+        imagen: formatImageUrl(rawImg)
       };
     });
 
@@ -72,6 +89,7 @@ function normalizeMesas(pedidosBackend, totalMesas = 8) {
     return {
       id: num,
       estado: estadoUI,
+      visita_activa_id: pedido.visita_id || null,
       pedido: {
         id: String(pedido._id ?? pedido.id_pedido ?? `PED-${num}`),
         hora: pedido.hora_pedido ?? '--:--',
@@ -84,9 +102,6 @@ function normalizeMesas(pedidosBackend, totalMesas = 8) {
   });
 }
 
-/**
- * Mapea los estados del backend a los estados internos de la UI.
- */
 function mapEstadoBackendToUI(estadoBackend) {
   const map = {
     Pendiente: 'Esperando',
@@ -98,9 +113,6 @@ function mapEstadoBackendToUI(estadoBackend) {
   return map[estadoBackend] ?? estadoBackend ?? 'Esperando';
 }
 
-/**
- * Mapea los estados internos de la UI al formato que acepta el backend.
- */
 function mapEstadoUIToBackend(estadoUI) {
   const map = {
     Esperando: 'Pendiente',
@@ -111,9 +123,6 @@ function mapEstadoUIToBackend(estadoUI) {
   return map[estadoUI] ?? estadoUI;
 }
 
-/**
- * Determina de forma robusta si un producto está disponible en inventario.
- */
 function isProductAvailable(p) {
   if (p.disponible === false || p.disponible === 0 || p.disponible === 'false' || p.disponible === '0') {
     return false;
@@ -128,9 +137,6 @@ function isProductAvailable(p) {
   return true;
 }
 
-/**
- * Convierte un producto del backend al shape que usa la UI.
- */
 function normalizeProducto(p) {
   return {
     id: p._id ?? p.id_plato ?? p.id,
@@ -140,39 +146,26 @@ function normalizeProducto(p) {
     descripcion: p.descripcion ?? '',
     tiempo: p.tiempo_preparacion ?? p.tiempo ?? 0,
     disponible: isProductAvailable(p),
-    imagen: p.imagen ?? null,
-    destacado: p.destacado ?? false
+    imagen: formatImageUrl(p.imagen),
+    destacado: p.destacado ?? false,
+    etiquetas: Array.isArray(p.etiquetas) ? p.etiquetas : []
   };
 }
 
-// ──────────────────────────────────────────────────────────────────────────────
-// Provider
-// ──────────────────────────────────────────────────────────────────────────────
 export function RestaurantProvider({ children }) {
-
-  // 1. Estado de mesas — cargado desde el backend al montar
   const [tables, setTables] = useState([]);
-
-  // 2. Catálogo de productos — cargado desde el backend al montar
-  const [products, setProducts] = useState(INITIAL_PRODUCTS); // Fallback local mientras carga
-
-  // 3. Indicadores de carga para poder mostrar skeletons si se desea
+  const [products, setProducts] = useState(() => INITIAL_PRODUCTS.map(normalizeProducto));
   const [loadingTables, setLoadingTables] = useState(true);
   const [loadingProducts, setLoadingProducts] = useState(true);
 
-  // ──────────────────────────────────────────────────────────────────────────
-  // Carga inicial: mesas y productos desde el backend
-  // ──────────────────────────────────────────────────────────────────────────
   const fetchTables = useCallback(async () => {
     try {
       const res = await fetch(`${API_URL}/pedidos/info-mesas`);
       if (!res.ok) throw new Error(`HTTP ${res.status} al obtener mesas`);
       const data = await res.json();
-      // data: [{ id_pedido, num_mesa, estado_pedido, hora_pedido }]
       setTables(normalizeMesas(data));
     } catch (err) {
       console.error('[RestaurantContext] fetchTables error:', err);
-      // Fallback: inicializa 8 mesas libres para no dejar la UI en blanco
       setTables(
         Array.from({ length: 8 }, (_, i) => ({ id: i + 1, estado: 'Libre', pedido: null }))
       );
@@ -183,18 +176,14 @@ export function RestaurantProvider({ children }) {
 
   const fetchProducts = useCallback(async () => {
     try {
-      // El backend expone GET /productos/filtrados (con precio_maximo como query param).
-      // Usamos un precio muy alto para traer todo el catálogo disponible.
       const res = await fetch(`${API_URL}/productos/filtrados?precio_maximo=9999999`);
       if (!res.ok) throw new Error(`HTTP ${res.status} al obtener productos`);
       const data = await res.json();
       if (Array.isArray(data) && data.length > 0) {
         setProducts(data.map(normalizeProducto));
       }
-      // Si el backend devuelve vacío, mantenemos el fallback de INITIAL_PRODUCTS
     } catch (err) {
       console.error('[RestaurantContext] fetchProducts error:', err);
-      // Mantenemos INITIAL_PRODUCTS como fallback sin pisar el estado
     } finally {
       setLoadingProducts(false);
     }
@@ -204,7 +193,6 @@ export function RestaurantProvider({ children }) {
     fetchTables();
     fetchProducts();
 
-    // Sincronización en tiempo real: consulta mesas cada 2.5s
     const interval = setInterval(() => {
       fetchTables();
     }, 2500);
@@ -212,9 +200,6 @@ export function RestaurantProvider({ children }) {
     return () => clearInterval(interval);
   }, [fetchTables, fetchProducts]);
 
-  // ──────────────────────────────────────────────────────────────────────────
-  // resetTable — POST /mesas/{num}/liberar
-  // ──────────────────────────────────────────────────────────────────────────
   const resetTable = async (tableNumber) => {
     const num = parseInt(tableNumber, 10);
     setTables((prev) =>
@@ -228,23 +213,10 @@ export function RestaurantProvider({ children }) {
     }
   };
 
-  // ──────────────────────────────────────────────────────────────────────────
-  // submitOrderForTable — POST /pedidos
-  // ──────────────────────────────────────────────────────────────────────────
-  /**
-   * Envía un pedido al backend y actualiza optimistamente el estado local.
-   *
-   * @param {string|number} tableNumber   - Número de mesa
-   * @param {Array}         cartItems     - Items del carrito [{ product, quantity, note }]
-   * @param {string}        customerNotes - Notas generales del cliente
-   * @returns {Promise<Object>} - El objeto del nuevo pedido con los campos que usa la UI
-   * @throws {Error} - Si el backend devuelve un error HTTP
-   */
   const submitOrderForTable = async (tableNumber, cartItems, customerNotes = '') => {
     const num_mesa = parseInt(tableNumber, 10);
     const horaActual = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
-    // Normalizar items del carrito de manera totalmente resiliente
     const payloadItems = cartItems.map((item) => ({
       producto_id: String(item.product?.id || item.id || item._id || 'item'),
       nombre: item.product?.nombre || item.nombre || 'Platillo',
@@ -274,9 +246,7 @@ export function RestaurantProvider({ children }) {
     }
 
     const backendResponse = await res.json();
-    console.info('[RestaurantContext] Pedido creado en backend:', backendResponse);
 
-    // Items listos para consumo inmediato en la UI
     const uiItems = payloadItems.map((it) => ({
       product: {
         id: it.producto_id,
@@ -304,7 +274,6 @@ export function RestaurantProvider({ children }) {
       notas: customerNotes
     };
 
-    // Actualización optimista del estado local garantizando que la mesa exista en la lista
     setTables((prev) => {
       const exists = prev.some((t) => t.id === num_mesa);
       if (exists) {
@@ -317,7 +286,6 @@ export function RestaurantProvider({ children }) {
       return [...prev, { id: num_mesa, estado: 'Esperando', pedido: newOrder }];
     });
 
-    // También actualiza el estado de la mesa en el backend
     try {
       await fetch(`${API_URL}/mesas/${num_mesa}/estado`, {
         method: 'PUT',
@@ -328,25 +296,13 @@ export function RestaurantProvider({ children }) {
       console.warn('[RestaurantContext] No se pudo actualizar el estado de mesa en backend:', mesaErr);
     }
 
-    // Sincronizar mesas tras envío
     await fetchTables();
-
     return newOrder;
   };
 
-  // ──────────────────────────────────────────────────────────────────────────
-  // updateTableStatus — PUT /mesas/{num_mesa}/estado
-  // ──────────────────────────────────────────────────────────────────────────
-  /**
-   * Actualiza el estado de una mesa en el backend y de forma optimista en el estado local.
-   *
-   * @param {number} tableId   - ID (num_mesa) de la mesa
-   * @param {string} newStatus - Nuevo estado en formato UI ('Libre', 'En preparación', etc.)
-   */
   const updateTableStatus = async (tableId, newStatus) => {
     const estadoBackend = mapEstadoUIToBackend(newStatus);
 
-    // Actualización optimista local primero
     setTables((prev) =>
       prev.map((t) => {
         if (t.id === tableId) {
@@ -357,7 +313,6 @@ export function RestaurantProvider({ children }) {
       })
     );
 
-    // Luego sincroniza con el backend
     try {
       const res = await fetch(`${API_URL}/mesas/${tableId}/estado`, {
         method: 'PUT',
@@ -368,41 +323,24 @@ export function RestaurantProvider({ children }) {
       if (!res.ok) {
         const errBody = await res.text();
         console.error(`[RestaurantContext] updateTableStatus HTTP ${res.status}:`, errBody);
-        fetchTables();
-      } else {
-        console.info(`[RestaurantContext] Mesa ${tableId} → ${newStatus} (${estadoBackend})`);
-        fetchTables();
       }
+      await fetchTables();
     } catch (err) {
       console.error('[RestaurantContext] updateTableStatus error de red:', err);
-      fetchTables(); // Revertir al estado real del servidor
+      fetchTables();
     }
   };
 
-  // ──────────────────────────────────────────────────────────────────────────
-  // toggleProductAvailability — PATCH /productos/{id}/disponible
-  //
-  // productId es el _id string de MongoDB (ej: "507f1f77bcf86cd799439011"),
-  // que queda guardado como product.id en el estado local tras normalizeProducto().
-  // ──────────────────────────────────────────────────────────────────────────
-  /**
-   * Activa o desactiva un producto del menú (uso exclusivo del cocinero).
-   *
-   * @param {string} productId - _id de MongoDB del producto (string ObjectId)
-   */
   const toggleProductAvailability = async (productId) => {
-    // Capturamos el valor ACTUAL antes del toggle para calcular el nuevo
     const productoActual = products.find((p) => p.id === productId);
     const nuevoEstado = !productoActual?.disponible;
 
-    // Toggle optimista local
     setProducts((prev) =>
       prev.map((p) =>
         p.id === productId ? { ...p, disponible: nuevoEstado } : p
       )
     );
 
-    // Sincroniza con el backend — PATCH /productos/{productId}/disponible
     try {
       const res = await fetch(`${API_URL}/productos/${productId}/disponible`, {
         method: 'PATCH',
@@ -410,27 +348,51 @@ export function RestaurantProvider({ children }) {
         body: JSON.stringify({ disponible: nuevoEstado })
       });
       if (!res.ok) {
-        const errBody = await res.text();
-        console.error(`[RestaurantContext] toggleProductAvailability HTTP ${res.status}:`, errBody);
-        // Revertir el toggle optimista si el backend falló
         setProducts((prev) =>
           prev.map((p) => (p.id === productId ? { ...p, disponible: !p.disponible } : p))
         );
-      } else {
-        console.info(`[RestaurantContext] Producto ${productId} → disponible: ${nuevoEstado}`);
       }
     } catch (err) {
-      console.error('[RestaurantContext] toggleProductAvailability error de red:', err);
-      // Revertir el toggle optimista si hay error de red
       setProducts((prev) =>
         prev.map((p) => (p.id === productId ? { ...p, disponible: !p.disponible } : p))
       );
     }
   };
 
-  // ──────────────────────────────────────────────────────────────────────────
-  // setTableCount — ajusta el número total de mesas localmente
-  // ──────────────────────────────────────────────────────────────────────────
+  const validarQrMesa = async (numMesa, token) => {
+    try {
+      const res = await fetch(`${API_URL}/mesas/${numMesa}/validar-qr?token=${encodeURIComponent(token)}`);
+      if (res.status === 403) {
+        return { valid: false, status: 403, error: 'QR Inválido: Acceso no autorizado' };
+      }
+      if (!res.ok) {
+        return { valid: false, status: res.status, error: 'Error al validar QR' };
+      }
+      const data = await res.json();
+      return { valid: true, data };
+    } catch (err) {
+      return { valid: false, error: err.message };
+    }
+  };
+
+  const llamarGarzon = async (visitaIdOrMesa, motivo = 'Atención solicitada en mesa') => {
+    try {
+      const res = await fetch(`${API_URL}/visitas/${visitaIdOrMesa}/llamar-garzon`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ motivo })
+      });
+      if (!res.ok) {
+        const errText = await res.text();
+        throw new Error(`HTTP ${res.status}: ${errText}`);
+      }
+      return await res.json();
+    } catch (err) {
+      console.error('[RestaurantContext] llamarGarzon error:', err);
+      throw err;
+    }
+  };
+
   const setTableCount = (newCount) => {
     const val = parseInt(newCount, 10);
     if (isNaN(val)) return;
@@ -449,9 +411,6 @@ export function RestaurantProvider({ children }) {
     });
   };
 
-  // ──────────────────────────────────────────────────────────────────────────
-  // Context value — misma firma que la versión anterior para no romper la UI
-  // ──────────────────────────────────────────────────────────────────────────
   return (
     <RestaurantContext.Provider
       value={{
@@ -461,7 +420,8 @@ export function RestaurantProvider({ children }) {
         submitOrderForTable,
         updateTableStatus,
         toggleProductAvailability,
-        // Extras útiles para mostrar estados de carga en la UI
+        validarQrMesa,
+        llamarGarzon,
         loadingTables,
         loadingProducts,
         resetTable,

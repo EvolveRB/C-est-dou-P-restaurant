@@ -1,5 +1,7 @@
-from fastapi import FastAPI, Depends, HTTPException
+import os
+from fastapi import FastAPI, Depends, HTTPException, Body
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from typing import Optional, List, Union
 from datetime import datetime
@@ -8,7 +10,7 @@ from database import get_db
 
 app = FastAPI(
     title="API Restaurante - C'est doux P",
-    description="13 operaciones CRUD + Auth — Motor (MongoDB Atlas)"
+    description="13 operaciones CRUD + Auth + Visitas — Motor (MongoDB Atlas)"
 )
 
 # ==============================================================================
@@ -26,6 +28,14 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# ==============================================================================
+# ARCHIVOS ESTÁTICOS — Servir imágenes de los productos desde /Imagenes
+# ==============================================================================
+imagenes_dir = os.path.join(os.path.dirname(__file__), "Imagenes")
+if not os.path.exists(imagenes_dir):
+    os.makedirs(imagenes_dir, exist_ok=True)
+app.mount("/Imagenes", StaticFiles(directory=imagenes_dir), name="imagenes")
 
 # ==============================================================================
 # HELPERS — serialización y búsqueda flexible
@@ -63,22 +73,38 @@ async def build_mesa_pedidos_filter(num_mesa: int, db) -> dict:
 
 
 # ==============================================================================
-# MODELOS PYDANTIC
+# MODELOS PYDANTIC — Alineados con esquema final MongoDB Atlas
 # ==============================================================================
+
+# ── Mesa ──────────────────────────────────────────────────────────────────────
 class MesaCreate(BaseModel):
     num_mesa: int
     estado: str = "Libre"
     piso: int = 1
+    qr_token: Optional[str] = None
+    visita_activa_id: Optional[str] = None
 
+class MesaUpdateEstado(BaseModel):
+    estado: str
+
+# ── Producto ──────────────────────────────────────────────────────────────────
 class ProductoCreate(BaseModel):
     nombre: str
     categoria: str = "Platos de Fondo"
     precio: float
+    etiquetas: List[str] = []
     disponibilidad: str = "En stock"
     imagen: Optional[str] = None
     tiempo_preparacion: int = 15
     descripcion: Optional[str] = None
 
+class ProductoUpdatePrecio(BaseModel):
+    precio: float
+
+class ProductoDisponibilidad(BaseModel):
+    disponible: bool  # True -> "En stock" | False -> "Agotado"
+
+# ── Pedido (items con patrón snapshot) ────────────────────────────────────────
 class ItemPedido(BaseModel):
     producto_id: Optional[str] = "1"
     nombre: Optional[str] = "Plato"
@@ -88,21 +114,35 @@ class ItemPedido(BaseModel):
 
 class PedidoCreate(BaseModel):
     num_mesa: Union[int, str]
+    visita_id: Optional[str] = None
     empleado_id: Optional[str] = None
     estado_pedido: Optional[str] = "Pendiente"
     hora_pedido: Optional[str] = None
     items: Optional[List[ItemPedido]] = []
     notas: Optional[str] = None
 
-class MesaUpdateEstado(BaseModel):
-    estado: str
+# ── Visita ────────────────────────────────────────────────────────────────────
+class SolicitudGarzon(BaseModel):
+    activa: bool = False
+    hora_solicitud: Optional[str] = None
+    motivo: Optional[str] = None
 
-class ProductoUpdatePrecio(BaseModel):
-    precio: float
+class PagoVisita(BaseModel):
+    metodo: str = "Efectivo"
+    monto: float = 0.0
+    hora: Optional[str] = None
 
-class ProductoDisponibilidad(BaseModel):
-    disponible: bool  # True → "En stock" | False → "Agotado"
+class VisitaCreate(BaseModel):
+    num_mesa: int
+    hora_inicio: Optional[str] = None
+    estado_visita: str = "Activa"
+    solicitud_garzon: Optional[SolicitudGarzon] = None
+    pagos: List[PagoVisita] = []
 
+class LlamarGarzonInput(BaseModel):
+    motivo: str = "Necesito atención"
+
+# ── Auth ──────────────────────────────────────────────────────────────────────
 class LoginInput(BaseModel):
     username: str
     password: str
@@ -132,7 +172,6 @@ async def login_empleado(creds: LoginInput, db=Depends(get_db)):
         except Exception as db_err:
             print(f"[AUTH WARN] Error consultando MongoDB: {db_err}")
         
-        # Si no se encuentra por nombre específico pero ingresó 'admin', buscar el primer Administrador
         u_lower = username_clean.lower()
         if not empleado and u_lower in ["admin", "administrador", "gerente", "admin@restaurant.cl"]:
             try:
@@ -180,7 +219,6 @@ async def login_empleado(creds: LoginInput, db=Depends(get_db)):
         if not empleado:
             raise HTTPException(status_code=401, detail="Usuario o contraseña incorrectos")
 
-        # Normalizamos los campos esperados por el frontend
         empleado["cargo"] = empleado.get("rol", empleado.get("cargo", "Mesero"))
         return serializar_doc(empleado)
     except HTTPException:
@@ -237,7 +275,6 @@ async def crear_pedido(pedido: PedidoCreate, db=Depends(get_db)):
         pedido_dict["total"] = subtotal
         pedido_dict["estado_pedido"] = "Pendiente"
 
-        # Archivar pedidos anteriores no entregados de la misma mesa para evitar solapamientos
         filtro_mesa = await build_mesa_pedidos_filter(pedido_dict["num_mesa"], db)
         await db.pedidos.update_many(
             {**filtro_mesa, "estado_pedido": {"$nin": ["Entregado", "Archivado"]}},
@@ -246,7 +283,6 @@ async def crear_pedido(pedido: PedidoCreate, db=Depends(get_db)):
 
         resultado = await db.pedidos.insert_one(pedido_dict)
 
-        # Actualizar el estado de la mesa a 'Pendiente' en tiempo real
         await db.mesas.update_one(
             {"$or": [{"num_mesa": pedido_dict["num_mesa"]}, {"num_mesa": str(pedido_dict["num_mesa"])}]},
             {"$set": {"estado": "Pendiente", "num_mesa": pedido_dict["num_mesa"]}},
@@ -254,6 +290,32 @@ async def crear_pedido(pedido: PedidoCreate, db=Depends(get_db)):
         )
 
         return {"mensaje": "Pedido creado", "id": str(resultado.inserted_id)}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=repr(e))
+
+
+# ==============================================================================
+# INSERT — Visitas
+# ==============================================================================
+@app.post("/visitas", tags=["Visita"])
+async def crear_visita(visita: VisitaCreate, db=Depends(get_db)):
+    """Crea una nueva visita para una mesa."""
+    try:
+        visita_dict = visita.model_dump()
+        if not visita_dict.get("hora_inicio"):
+            visita_dict["hora_inicio"] = datetime.now().isoformat()
+        if visita_dict.get("solicitud_garzon") is None:
+            visita_dict["solicitud_garzon"] = {"activa": False, "hora_solicitud": None, "motivo": None}
+
+        resultado = await db.visitas.insert_one(visita_dict)
+        visita_id_str = str(resultado.inserted_id)
+
+        await db.mesas.update_one(
+            {"$or": [{"num_mesa": visita.num_mesa}, {"num_mesa": str(visita.num_mesa)}]},
+            {"$set": {"visita_activa_id": visita_id_str}}
+        )
+
+        return {"mensaje": "Visita creada", "id": visita_id_str}
     except Exception as e:
         raise HTTPException(status_code=500, detail=repr(e))
 
@@ -270,7 +332,8 @@ async def select_productos_por_precio(precio_maximo: float = 10000, db=Depends(g
         cursor = db.producto.find(
             {"precio": {"$lt": precio_maximo}},
             {"_id": 1, "id_plato": 1, "nombre": 1, "precio": 1, "disponibilidad": 1,
-             "categoria": 1, "descripcion": 1, "tiempo_preparacion": 1, "imagen": 1}
+             "categoria": 1, "descripcion": 1, "tiempo_preparacion": 1, "imagen": 1,
+             "etiquetas": 1}
         )
         docs = await cursor.to_list(length=200)
         return [serializar_doc(d) for d in docs]
@@ -310,11 +373,8 @@ async def select_pedidos_info_mesas(db=Depends(get_db)):
                     }
                 }
             },
-            # Solo pedidos con mesa asignada y no archivados
             {"$match": {"num_mesa": {"$ne": None}, "estado_pedido": {"$ne": "Archivado"}}},
-            # Ordenar más reciente primero
             {"$sort": {"_id": -1}},
-            # Agrupar por mesa para tomar siempre la última comanda
             {
                 "$group": {
                     "_id": "$num_mesa",
@@ -381,13 +441,11 @@ async def update_estado_mesa(num_mesa: int, update_data: MesaUpdateEstado, db=De
         filtro_mesa = await build_mesa_pedidos_filter(num_mesa, db)
 
         if nuevo_estado in ["Libre", "Entregado"]:
-            # Marcar todos los pedidos activos de la mesa como Entregados
             await db.pedidos.update_many(
                 {**filtro_mesa, "estado_pedido": {"$nin": ["Entregado", "Archivado"]}},
                 {"$set": {"estado_pedido": "Entregado"}}
             )
         else:
-            # Actualizar todos los pedidos activos de esa mesa al nuevo estado
             await db.pedidos.update_many(
                 {**filtro_mesa, "estado_pedido": {"$nin": ["Entregado", "Archivado"]}},
                 {"$set": {"estado_pedido": nuevo_estado}}
@@ -406,7 +464,7 @@ async def liberar_mesa(num_mesa: int, db=Depends(get_db)):
     try:
         await db.mesas.update_one(
             {"$or": [{"num_mesa": num_mesa}, {"num_mesa": str(num_mesa)}]},
-            {"$set": {"estado": "Libre", "num_mesa": num_mesa}},
+            {"$set": {"estado": "Libre", "num_mesa": num_mesa, "visita_activa_id": None}},
             upsert=True
         )
         filtro_mesa = await build_mesa_pedidos_filter(num_mesa, db)
@@ -457,6 +515,97 @@ async def toggle_disponibilidad_producto(id_producto: str, data: ProductoDisponi
         return {
             "mensaje": f"Producto '{id_producto}' actualizado a '{disponibilidad_str}'",
             "disponible": data.disponible
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=repr(e))
+
+
+# ==============================================================================
+# VISITAS — Llamar garzón y validar QR (RF-08 y Validación de mesa)
+# ==============================================================================
+@app.patch("/visitas/{visita_id}/llamar-garzon", tags=["Visita"])
+async def llamar_garzon(visita_id: str, datos: LlamarGarzonInput, db=Depends(get_db)):
+    """
+    Actualiza el objeto solicitud_garzon de una visita a activa: true con su respectivo motivo.
+    Acepta tanto el ObjectId de la visita como el número de mesa directamente.
+    """
+    try:
+        solicitud_payload = {
+            "activa": True,
+            "hora_solicitud": datetime.utcnow().isoformat(),
+            "motivo": datos.motivo
+        }
+
+        filtro_id = None
+        try:
+            filtro_id = {"_id": ObjectId(visita_id)}
+        except Exception:
+            filtro_id = {"_id": visita_id}
+
+        resultado = await db.visitas.update_one(
+            filtro_id,
+            {"$set": {"solicitud_garzon": solicitud_payload}}
+        )
+
+        if resultado.matched_count == 0:
+            try:
+                num_m = int(visita_id)
+                res_mesa = await db.visitas.update_one(
+                    {"$or": [{"num_mesa": num_m}, {"num_mesa": str(num_m)}], "estado_visita": "Activa"},
+                    {"$set": {"solicitud_garzon": solicitud_payload}}
+                )
+                if res_mesa.matched_count > 0:
+                    return {"mensaje": "Garzón llamado exitosamente", "visita_id": visita_id}
+                
+                nueva_visita = {
+                    "num_mesa": num_m,
+                    "hora_inicio": datetime.utcnow().isoformat(),
+                    "estado_visita": "Activa",
+                    "solicitud_garzon": solicitud_payload,
+                    "pagos": []
+                }
+                nueva_res = await db.visitas.insert_one(nueva_visita)
+                await db.mesas.update_one(
+                    {"$or": [{"num_mesa": num_m}, {"num_mesa": str(num_m)}]},
+                    {"$set": {"visita_activa_id": str(nueva_res.inserted_id)}},
+                    upsert=True
+                )
+                return {"mensaje": "Garzón llamado exitosamente", "visita_id": str(nueva_res.inserted_id)}
+            except Exception:
+                pass
+
+            raise HTTPException(status_code=404, detail="Visita no encontrada")
+
+        return {"mensaje": "Garzón llamado exitosamente", "visita_id": visita_id}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=repr(e))
+
+
+@app.get("/mesas/{num_mesa}/validar-qr", tags=["Mesa"])
+async def validar_qr(num_mesa: int, token: str, db=Depends(get_db)):
+    """
+    Valida que el token QR de una mesa coincida con el almacenado en la BD.
+    Retorna 403 si el token no coincide o la mesa no existe.
+    """
+    try:
+        mesa = await db.mesas.find_one(
+            {"$or": [{"num_mesa": num_mesa}, {"num_mesa": str(num_mesa)}]}
+        )
+        if not mesa:
+            raise HTTPException(status_code=403, detail="QR inválido: mesa no encontrada")
+        
+        token_db = mesa.get("qr_token")
+        if token_db is not None and token_db != token:
+            raise HTTPException(status_code=403, detail="QR inválido: token no coincide")
+
+        return {
+            "mensaje": "QR válido",
+            "num_mesa": num_mesa,
+            "visita_activa_id": mesa.get("visita_activa_id")
         }
     except HTTPException:
         raise
@@ -569,6 +718,6 @@ async def drop_coleccion_promociones(db=Depends(get_db)):
     """Equivale a DROP TABLE promocion_temporada."""
     try:
         await db.promocion_temporada.drop()
-        return {"mensaje": "Colección 'promocion_temporada' eliminada con éxito (DROP)"}
+        return {"mensaje": "Coleccion 'promocion_temporada' eliminada con exito (DROP)"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=repr(e))

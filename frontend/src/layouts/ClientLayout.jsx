@@ -1,30 +1,65 @@
 import { useState, useEffect } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, useSearchParams } from 'react-router-dom';
 import ClientHeader from '../components/client/ClientHeader';
 import BottomNav from '../components/client/BottomNav';
 import ClientCatalogPage from '../pages/client/ClientCatalogPage';
 import ClientOrderStatusPage from '../pages/client/ClientOrderStatusPage';
 import ClientCartPage from '../pages/client/ClientCartPage';
 import { useCart } from '../context/CartContext';
-import { Check } from 'lucide-react';
+import { useRestaurant } from '../context/RestaurantContext';
+import { Check, AlertTriangle } from 'lucide-react';
 import '../styles/client.css';
 
 export default function ClientLayout() {
   const { numeroMesa } = useParams();
-  const { updateTable, toastMessage } = useCart();
+  const [searchParams] = useSearchParams();
+  const { updateTable, toastMessage, showToast } = useCart();
+  const { validarQrMesa } = useRestaurant();
   const [activeTab, setActiveTab] = useState('inicio');
   const [searchQuery, setSearchQuery] = useState('');
+  const [qrValid, setQrValid] = useState(true);
 
+  // Validación de Token QR al montar la vista de mesa
   useEffect(() => {
     if (numeroMesa) {
       updateTable(numeroMesa);
+
+      const token = searchParams.get('token');
+      if (token && validarQrMesa) {
+        validarQrMesa(parseInt(numeroMesa, 10), token).then((res) => {
+          if (!res.valid) {
+            setQrValid(false);
+            showToast('⚠️ QR Inválido: El código QR escaneado no coincide con esta mesa.');
+          } else {
+            setQrValid(true);
+          }
+        });
+      }
     }
-  }, [numeroMesa, updateTable]);
+  }, [numeroMesa, searchParams, updateTable, validarQrMesa]);
 
   return (
     <div className="client-app-wrapper">
       {/* Contenedor EXCLUSIVO de teléfono celular */}
       <div className="mobile-device-shell">
+        {/* Banner si el QR no es válido */}
+        {!qrValid && (
+          <div style={{
+            backgroundColor: '#FEE2E2',
+            color: '#B91C1C',
+            padding: '8px 16px',
+            fontSize: '12px',
+            fontWeight: 700,
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            zIndex: 40
+          }}>
+            <AlertTriangle size={16} />
+            <span>Atención: Código QR de mesa no validado (403).</span>
+          </div>
+        )}
+
         {/* Cabecera del teléfono con barra de estado y búsqueda */}
         <ClientHeader
           searchQuery={searchQuery}
@@ -53,7 +88,11 @@ export default function ClientLayout() {
         {/* Feedback flotante tipo Toast en el móvil */}
         {toastMessage && (
           <div className="client-toast">
-            <Check size={16} strokeWidth={3} />
+            {toastMessage.includes('⚠️') ? (
+              <AlertTriangle size={16} strokeWidth={2.5} color="#FBBF24" />
+            ) : (
+              <Check size={16} strokeWidth={3} />
+            )}
             <span>{toastMessage}</span>
           </div>
         )}

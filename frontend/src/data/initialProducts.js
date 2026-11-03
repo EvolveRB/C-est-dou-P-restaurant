@@ -17,7 +17,9 @@ export const INITIAL_PRODUCTS = [
     descripcion: "Descripción breve de los ingredientes seleccionados y guarnición de autor.",
     tiempo: 20,
     disponible: true,
-    destacado: true
+    destacado: true,
+    imagen: "plato_alpha.jpg",
+    etiquetas: ["Especialidad", "Sin Gluten"]
   },
   {
     id: 2,
@@ -27,7 +29,9 @@ export const INITIAL_PRODUCTS = [
     descripcion: "Porción individual ideal para comenzar, con toque de finas hierbas y aderezo.",
     tiempo: 10,
     disponible: true,
-    destacado: true
+    destacado: true,
+    imagen: "entrada_beta.jpg",
+    etiquetas: ["Vegetariano", "Ligero"]
   },
   {
     id: 3,
@@ -37,7 +41,9 @@ export const INITIAL_PRODUCTS = [
     descripcion: "Receta de la casa servida caliente con croutons dorados y queso gratinado.",
     tiempo: 15,
     disponible: true,
-    destacado: false
+    destacado: false,
+    imagen: "sopa_gamma.jpg",
+    etiquetas: ["Casero", "Caliente"]
   },
   {
     id: 4,
@@ -47,7 +53,9 @@ export const INITIAL_PRODUCTS = [
     descripcion: "Acompañado de papas rústicas al romero y suave reducción de vino tinto.",
     tiempo: 25,
     disponible: true,
-    destacado: true
+    destacado: true,
+    imagen: "corte_delta.jpg",
+    etiquetas: ["Chef Choice", "Premium"]
   },
   {
     id: 5,
@@ -57,7 +65,9 @@ export const INITIAL_PRODUCTS = [
     descripcion: "Salsa marinara clásica con albahaca fresca cosechada y parmesano reggiano.",
     tiempo: 18,
     disponible: true,
-    destacado: true
+    destacado: true,
+    imagen: "pasta_epsilon.jpg",
+    etiquetas: ["Vegetariano", "Artesanal"]
   },
   {
     id: 6,
@@ -67,7 +77,9 @@ export const INITIAL_PRODUCTS = [
     descripcion: "Bizcocho húmedo con relleno de crema suave y coulis de frutos rojos silvestres.",
     tiempo: 8,
     disponible: true,
-    destacado: true
+    destacado: true,
+    imagen: "postreUV.jpeg",
+    etiquetas: ["Dulce", "Sin TACC"]
   },
   {
     id: 7,
@@ -77,7 +89,9 @@ export const INITIAL_PRODUCTS = [
     descripcion: "Finas láminas de filete con alcaparras crocantes, rúcula y aceite de trufa blanca.",
     tiempo: 12,
     disponible: true,
-    destacado: false
+    destacado: false,
+    imagen: "carpaccio_trufado.jpg",
+    etiquetas: ["Gourmet", "Sin Gluten"]
   },
   {
     id: 8,
@@ -87,7 +101,9 @@ export const INITIAL_PRODUCTS = [
     descripcion: "Crema aterciopelada a base de langostinos, coñac y un toque de crema fresca.",
     tiempo: 15,
     disponible: true,
-    destacado: false
+    destacado: false,
+    imagen: "bisque_mariscos.jpg",
+    etiquetas: ["Mariscos", "Especialidad"]
   },
   {
     id: 9,
@@ -97,7 +113,9 @@ export const INITIAL_PRODUCTS = [
     descripcion: "Masa hecha a mano bañada en mantequilla de salvia y lluvia de nueces tostadas.",
     tiempo: 18,
     disponible: true,
-    destacado: false
+    destacado: false,
+    imagen: "ravioles_ricotta.jpg",
+    etiquetas: ["Vegetariano", "Casero"]
   },
   {
     id: 10,
@@ -107,7 +125,9 @@ export const INITIAL_PRODUCTS = [
     descripcion: "Zumo natural de limones sutiles con menta recién machacada y jarabe de jengibre.",
     tiempo: 5,
     disponible: true,
-    destacado: false
+    destacado: false,
+    imagen: "limonada_menta.jpg",
+    etiquetas: ["Vegano", "Natural"]
   },
   {
     id: 11,
@@ -117,7 +137,9 @@ export const INITIAL_PRODUCTS = [
     descripcion: "Vino del Valle de Colchagua, notas a frutos negros maduros y roble tostado.",
     tiempo: 3,
     disponible: true,
-    destacado: false
+    destacado: false,
+    imagen: "vino_reserva.jpg",
+    etiquetas: ["18+", "Reserva"]
   }
 ];
 

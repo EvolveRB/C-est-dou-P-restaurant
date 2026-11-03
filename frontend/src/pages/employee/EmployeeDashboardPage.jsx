@@ -1,8 +1,7 @@
 import { useState } from 'react';
 import { useRestaurant } from '../../context/RestaurantContext';
 import CookOrderModal from '../../components/employee/CookOrderModal';
-import PlaceholderIcon from '../../components/client/PlaceholderIcon';
-import { EyeOff, Eye } from 'lucide-react';
+import { EyeOff, Eye, Utensils } from 'lucide-react';
 
 export default function EmployeeDashboardPage() {
   const { tables, products, updateTableStatus, toggleProductAvailability } = useRestaurant();
@@ -32,7 +31,7 @@ export default function EmployeeDashboardPage() {
       padding: '20px 24px',
       boxSizing: 'border-box'
     }}>
-      {/* Contenedor Exclusivo de PC (Abarca toda la página y es responsive con fondo blanco) */}
+      {/* Contenedor Exclusivo de PC */}
       <div style={{
         width: '100%',
         flex: 1,
@@ -44,7 +43,7 @@ export default function EmployeeDashboardPage() {
         display: 'flex',
         flexDirection: 'column'
       }}>
-        {/* Encabezado PC con título y selector de pestañas */}
+        {/* Encabezado PC con título y selector de pestañas con paleta unificada */}
         <div style={{
           padding: '28px 36px 20px',
           display: 'flex',
@@ -60,20 +59,21 @@ export default function EmployeeDashboardPage() {
             </h1>
           </div>
 
-          {/* Selector de pestañas */}
+          {/* Selector de pestañas unificado */}
           <div style={{ display: 'flex', gap: '12px' }}>
             <button
               onClick={() => setActiveTab('pedidos')}
               style={{
-                backgroundColor: activeTab === 'pedidos' ? '#EBBFB3' : '#FFFFFF',
-                color: activeTab === 'pedidos' ? '#4A151A' : '#4B5563',
-                border: activeTab === 'pedidos' ? '1.5px solid #DCA99C' : '1px solid #E5D8CC',
+                backgroundColor: activeTab === 'pedidos' ? 'var(--c-burgundy-800)' : '#FFFFFF',
+                color: activeTab === 'pedidos' ? '#FFFFFF' : '#4B5563',
+                border: activeTab === 'pedidos' ? '1.5px solid var(--c-burgundy-800)' : '1px solid #E5D8CC',
                 padding: '10px 28px',
                 borderRadius: '14px',
                 fontSize: '15px',
                 fontWeight: 700,
                 cursor: 'pointer',
-                transition: 'all 0.15s ease'
+                transition: 'all 0.15s ease',
+                boxShadow: activeTab === 'pedidos' ? '0 4px 14px rgba(92, 29, 36, 0.25)' : 'none'
               }}
             >
               Pedidos
@@ -82,15 +82,16 @@ export default function EmployeeDashboardPage() {
             <button
               onClick={() => setActiveTab('inventario')}
               style={{
-                backgroundColor: activeTab === 'inventario' ? '#EBBFB3' : '#FFFFFF',
-                color: activeTab === 'inventario' ? '#4A151A' : '#4B5563',
-                border: activeTab === 'inventario' ? '1.5px solid #DCA99C' : '1px solid #E5D8CC',
+                backgroundColor: activeTab === 'inventario' ? 'var(--c-burgundy-800)' : '#FFFFFF',
+                color: activeTab === 'inventario' ? '#FFFFFF' : '#4B5563',
+                border: activeTab === 'inventario' ? '1.5px solid var(--c-burgundy-800)' : '1px solid #E5D8CC',
                 padding: '10px 28px',
                 borderRadius: '14px',
                 fontSize: '15px',
                 fontWeight: 700,
                 cursor: 'pointer',
-                transition: 'all 0.15s ease'
+                transition: 'all 0.15s ease',
+                boxShadow: activeTab === 'inventario' ? '0 4px 14px rgba(92, 29, 36, 0.25)' : 'none'
               }}
             >
               Inventario
@@ -99,7 +100,7 @@ export default function EmployeeDashboardPage() {
         </div>
 
         {/* ========================================================
-            TAB 1: VISTA DE PEDIDOS (PC - ABARCA TODA LA PÁGINA)
+            TAB 1: VISTA DE PEDIDOS (PC)
            ======================================================== */}
         {activeTab === 'pedidos' && (
           <div style={{
@@ -137,7 +138,7 @@ export default function EmployeeDashboardPage() {
                 </span>
               </div>
 
-              {/* Grilla PC: responsive y dinámica con todas las mesas de QRs */}
+              {/* Grilla PC de mesas */}
               <div style={{
                 display: 'grid',
                 gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))',
@@ -247,6 +248,8 @@ export default function EmployeeDashboardPage() {
                 paddingRight: '6px'
               }}>
                 {products.map((prod, index) => {
+                  const hasImage = Boolean(prod.imagen);
+
                   return (
                     <div
                       key={prod.id}
@@ -254,39 +257,64 @@ export default function EmployeeDashboardPage() {
                         backgroundColor: '#FFFFFF',
                         border: '1px solid #EEDBCE',
                         borderRadius: '16px',
-                        padding: '12px',
+                        padding: '14px',
                         display: 'flex',
                         flexDirection: 'column',
                         opacity: prod.disponible ? 1 : 0.65,
                         transition: 'all 0.2s ease'
                       }}
                     >
-                      <div style={{
-                        width: '100%',
-                        height: '80px',
-                        backgroundColor: '#F5DDD4',
-                        borderRadius: '12px',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        marginBottom: '10px'
-                      }}>
-                        <PlaceholderIcon className="placeholder-icon" style={{ width: '30px', height: '30px' }} />
-                      </div>
+                      {/* Vista Cocina: Renderizado condicional de imagen o icono neutro (sin placeholders falsos ni etiquetas engañosas) */}
+                      {hasImage ? (
+                        <div style={{
+                          width: '100%',
+                          height: '90px',
+                          borderRadius: '12px',
+                          overflow: 'hidden',
+                          marginBottom: '10px'
+                        }}>
+                          <img
+                            src={prod.imagen}
+                            alt={prod.nombre}
+                            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                          />
+                        </div>
+                      ) : (
+                        <div style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          color: 'var(--c-terracotta)',
+                          marginBottom: '8px'
+                        }}>
+                          <Utensils size={16} />
+                          <span style={{ fontSize: '11px', fontWeight: 600, color: '#8E5F64' }}>
+                            {prod.categoria || 'Cocina'}
+                          </span>
+                        </div>
+                      )}
 
-                      <div style={{ fontSize: '14px', fontWeight: 800, color: '#1F242E' }}>
+                      <div style={{ fontSize: '14px', fontWeight: 800, color: '#1F242E', marginBottom: '8px' }}>
                         Plato {index + 1}: {prod.nombre}
                       </div>
-                      <div style={{ fontSize: '11.5px', color: '#6B7280', margin: '2px 0 10px' }}>
-                        Sin imagen asignada
-                      </div>
+
+                      {/* Etiquetas de dieta si existen */}
+                      {prod.etiquetas && prod.etiquetas.length > 0 && (
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginBottom: '10px' }}>
+                          {prod.etiquetas.map((t, idx) => (
+                            <span key={idx} className="badge-tag">
+                              {t}
+                            </span>
+                          ))}
+                        </div>
+                      )}
 
                       <button
                         onClick={() => toggleProductAvailability(prod.id)}
                         style={{
                           marginTop: 'auto',
                           width: '100%',
-                          padding: '7px 10px',
+                          padding: '8px 10px',
                           borderRadius: '10px',
                           fontSize: '12px',
                           fontWeight: 700,
@@ -297,7 +325,8 @@ export default function EmployeeDashboardPage() {
                           gap: '6px',
                           backgroundColor: prod.disponible ? '#DCFCE7' : '#FEE2E2',
                           color: prod.disponible ? '#15803D' : '#B91C1C',
-                          border: prod.disponible ? '1px solid #BBF7D0' : '1px solid #FECACA'
+                          border: prod.disponible ? '1px solid #BBF7D0' : '1px solid #FECACA',
+                          transition: 'all 0.15s ease'
                         }}
                         title={prod.disponible ? 'Desactivar de la carta del cliente' : 'Activar en la carta'}
                       >

@@ -1,15 +1,30 @@
-import { ShoppingBag, Plus, Minus, Trash2, ArrowRight } from 'lucide-react';
+import { ShoppingBag, Plus, Minus, Trash2, ArrowRight, BellRing } from 'lucide-react';
 import { useCart } from '../../context/CartContext';
 import { formatPrice } from '../../data/initialProducts';
 
 export default function ClientCartPage({ onGoToMenu, onOrderSuccess }) {
-  const { cart, updateQuantity, removeFromCart, totalPrice, totalItems, sendOrder, tableNumber, sendingOrder } = useCart();
+  const {
+    cart,
+    updateQuantity,
+    removeFromCart,
+    totalPrice,
+    totalItems,
+    sendOrder,
+    tableNumber,
+    sendingOrder,
+    solicitarGarzon,
+    callingWaiter
+  } = useCart();
 
   const handleSend = async () => {
     const order = await sendOrder();
     if (order) {
       onOrderSuccess();
     }
+  };
+
+  const handleLlamarGarzon = () => {
+    solicitarGarzon('Atención requerida en el pedido');
   };
 
   if (cart.length === 0) {
@@ -34,23 +49,28 @@ export default function ClientCartPage({ onGoToMenu, onOrderSuccess }) {
         <p style={{ fontSize: '13px', color: 'var(--c-text-muted)', maxWidth: '240px', marginBottom: '22px' }}>
           Selecciona deliciosos platos de la carta para tu Mesa {tableNumber}.
         </p>
-        <button
-          onClick={onGoToMenu}
-          style={{
-            background: 'var(--c-burgundy-800)',
-            color: 'white',
-            padding: '11px 22px',
-            borderRadius: 'var(--radius-pill)',
-            fontWeight: 700,
-            fontSize: '13.5px',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px'
-          }}
-        >
-          <span>Explorar Catálogo</span>
-          <ArrowRight size={16} />
-        </button>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', width: '100%', maxWidth: '260px' }}>
+          <button
+            onClick={onGoToMenu}
+            className="btn-primary"
+            style={{ borderRadius: 'var(--radius-pill)', padding: '11px 22px' }}
+          >
+            <span>Explorar Catálogo</span>
+            <ArrowRight size={16} />
+          </button>
+
+          {/* RF-08: Llamar garzón disponible incluso antes de pedir */}
+          <button
+            onClick={handleLlamarGarzon}
+            disabled={callingWaiter}
+            className="btn-secondary"
+            style={{ borderRadius: 'var(--radius-pill)', fontSize: '13px' }}
+          >
+            <BellRing size={15} />
+            <span>{callingWaiter ? 'Llamando...' : 'Llamar al Garzón'}</span>
+          </button>
+        </div>
       </div>
     );
   }
@@ -153,30 +173,38 @@ export default function ClientCartPage({ onGoToMenu, onOrderSuccess }) {
         </div>
       </div>
 
-      {/* Submit Button */}
-      <button
-        onClick={handleSend}
-        disabled={sendingOrder}
-        style={{
-          width: '100%',
-          background: 'var(--c-burgundy-800)',
-          color: 'white',
-          padding: '14px',
-          borderRadius: '16px',
-          fontWeight: 800,
-          fontSize: '15px',
-          marginTop: '16px',
-          boxShadow: '0 6px 16px rgba(92, 29, 36, 0.25)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          gap: '8px',
-          opacity: sendingOrder ? 0.75 : 1,
-          cursor: sendingOrder ? 'wait' : 'pointer'
-        }}
-      >
-        <span>{sendingOrder ? 'Enviando comanda a cocina...' : `Enviar Pedido a Cocina • Mesa ${tableNumber}`}</span>
-      </button>
+      {/* Acciones principales: Enviar a cocina y Llamar Garzón */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '16px' }}>
+        <button
+          onClick={handleSend}
+          disabled={sendingOrder}
+          className="btn-primary"
+          style={{
+            width: '100%',
+            padding: '14px',
+            borderRadius: '16px',
+            fontSize: '15px'
+          }}
+        >
+          <span>{sendingOrder ? 'Enviando comanda a cocina...' : `Enviar Pedido a Cocina • Mesa ${tableNumber}`}</span>
+        </button>
+
+        {/* RF-08: Botón Llamar al Garzón con estilo unificado */}
+        <button
+          onClick={handleLlamarGarzon}
+          disabled={callingWaiter}
+          className="btn-secondary"
+          style={{
+            width: '100%',
+            padding: '11px',
+            borderRadius: '14px',
+            fontSize: '13.5px'
+          }}
+        >
+          <BellRing size={16} />
+          <span>{callingWaiter ? 'Notificando al Garzón...' : `Llamar Garzón a Mesa ${tableNumber}`}</span>
+        </button>
+      </div>
     </div>
   );
 }

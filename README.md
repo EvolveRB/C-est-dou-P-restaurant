@@ -10,21 +10,23 @@ El sistema ofrece una experiencia dual sincronizada en tiempo real: una interfaz
 
 ## 🌟 Novedades Recientes de la Versión
 
-1. **Frontend Desacoplado de Simulaciones:**
-   - Se refactorizaron completamente los contextos de React (`RestaurantContext.jsx`, `CartContext.jsx` y `AuthContext.jsx`) eliminando los datos simulados de `localStorage` y `setTimeout`.
-   - Todas las operaciones de carga de mesas, catálogo, pedidos y turnos se sincronizan de forma asíncrona mediante llamadas HTTP `fetch` reales al backend.
-   - Manejo de UI optimista (_Optimistic UI_) con reversión automática ante fallos de red.
+1. **Alineación de Modelos Pydantic con Esquema Final MongoDB Atlas:**
+   - **Producto**: Se integró `etiquetas: List[str] = []` (RF-05 para filtros dietéticos), `descripcion`, `imagen` y `tiempo_preparacion`.
+   - **Mesa**: Se incorporaron `piso: int`, `qr_token: Optional[str]` y `visita_activa_id: Optional[str]`.
+   - **Visita (Nueva Colección `visitas`)**: Modelo completo con `num_mesa`, `hora_inicio`, `estado_visita`, objeto embebido `solicitud_garzon` (`activa`, `hora_solicitud`, `motivo`) y lista de transacciones `pagos`.
+   - **Pedido**: Patrón de diseño snapshot en `items` (copia inmutable de `nombre` y `precio_unitario`) e integración de `visita_id`.
 
-2. **Migración Integral a MongoDB Atlas (Motor):**
-   - Transición de la capa de persistencia relacional (SQLite/Turso) a base de datos orientada a documentos en **MongoDB Atlas**.
-   - Conexión no bloqueante (_async/await_) mediante `AsyncIOMotorClient` (`motor.motor_asyncio`).
-   - Modelo de datos con **documentos embebidos** (`items` dentro de `pedidos`, eliminando los costosos JOINs relacionales).
-   - Traducción de las 13 consultas académicas obligatorias a operadores y agregaciones nativas de MongoDB (`$lookup`, `$lt`, `$set`, `$unset`, `drop()`).
+2. **Nuevos Endpoints del Ciclo de Servicio y Seguridad:**
+   - `PATCH /visitas/{visita_id}/llamar-garzon`: Activa `solicitud_garzon.activa = True` con marca de tiempo y motivo especificado (RF-08).
+   - `GET /mesas/{num_mesa}/validar-qr?token={qr_token}`: Retorna `HTTP 403 Forbidden` si el token del código QR no coincide con la mesa registrada.
+   - `POST /visitas`: Creación e inicialización de la sesión de una mesa en salón.
 
-3. **Autenticación y Control de Carta en Vivo:**
-   - Nuevo endpoint `POST /empleados/login` con validación de credenciales reales contra la colección `empleados`.
-   - Nuevo endpoint `PATCH /productos/{id}/disponible` para que el cocinero active o pause platillos al instante.
-   - Suite de pruebas automatizadas [`backend/test_suite.py`](backend/test_suite.py) (8/8 pruebas exitosas en tiempo real).
+3. **Refactorización UX/UI en Frontend (React):**
+   - **Unificación de Botones y Tipografía**: Se estandarizaron los botones de acción principal en toda la aplicación bajo la paleta oficial (Borgoña `var(--c-burgundy-800)` / `#5C1D24` y Terracota), eliminando inconsistencias con botones negros o cafés (`#23272F`).
+   - **RF-05 (Badges de Etiquetas)**: En el catálogo del cliente y modal de detalle, se mapea el arreglo `etiquetas` de cada plato mostrando insignias visuales (ej. *"Vegetariano"*, *"Sin Gluten"*, *"Chef Choice"*).
+   - **RF-08 (Llamar al Garzón)**: Botón de acción directa disponible en el flujo del cliente (carrito y monitor de comanda) que consume el endpoint dedicado de visitas con confirmación inmediata.
+   - **Manejo de Errores UX con Toasts**: Notificaciones flotantes claras y consistentes para *"QR Inválido"* (al escanear un QR con token no autorizado / 403), *"Producto agotado"* (al intentar agregar platos pausados) y *"Carrito vacío"* (al intentar ordenar sin ítems).
+   - **Vista de Cocina e Inventario**: Eliminación de placeholders rectangulares falsos y etiquetas de texto estáticas ("Sin imagen asignada"). Se implementó renderizado condicional inteligente: si hay imagen válida se exhibe la foto; de lo contrario se presenta un icono neutro de cocina (`<Utensils />`).
 
 ---
 
@@ -32,20 +34,20 @@ El sistema ofrece una experiencia dual sincronizada en tiempo real: una interfaz
 
 ### 📱 Experiencia del Cliente (Mobile-First / Acceso por Código QR)
 
-- **Acceso Directo por Mesa**: El cliente escanea el código QR de su mesa y accede a la URL dedicada `/mesa/:numeroMesa` sin necesidad de registro ni descargas.
-- **Catálogo Interactivo**: Filtrado rápido por categorías (Entradas, Platos de Fondo, Postres, Bebidas) y consulta en vivo desde MongoDB Atlas.
-- **Detalle y Personalización de Platillos**: Modal con selector de cantidades y campo de especificaciones/notas para cocina (ej. término de cocción, sin alérgenos).
-- **Carrito de Compras y Comanda**: Persistencia temporal local mientras el cliente arma el pedido, envío asíncrono (`POST /pedidos`) con items embebidos y bloqueo contra doble envío accidental.
+- **Acceso Directo por Mesa**: El cliente escanea el código QR de su mesa y accede a la URL dedicada `/mesa/:numeroMesa` con validación de token QR en tiempo real.
+- **Catálogo Interactivo con Badges**: Filtrado rápido por categorías y visualización de etiquetas dietéticas (RF-05).
+- **Detalle y Personalización de Platillos**: Modal con selector de cantidades y campo de especificaciones/notas para cocina.
+- **Carrito de Compras y Comanda**: Persistencia temporal local mientras el cliente arma el pedido, validación de stock y envío asíncrono (`POST /pedidos`).
+- **Botón Llamar al Garzón (RF-08)**: Asistencia en salón al instante desde cualquier vista del cliente.
 - **Monitor de Estado del Pedido**: Visualización en vivo del estado de preparación de la mesa (_Esperando_, _En preparación_, _Listo_, _Entregado_).
-- **Indicadores de Disponibilidad**: Platillos no disponibles marcados al instante para evitar pedidos sin stock.
 
 ### 🖥️ Portal de Personal y Cocina (Desktop & Tablet)
 
 - **Autenticación y Control de Turnos**: Pantalla de acceso conectada a la base de datos con gestión de roles (_Mesero / Garzón_, _Cocinero / Chef_, _Administrador_) y persistencia de sesión.
-- **Panel de Salón y Mesas**: Cuadrícula dinámica con el estado operativo de todas las mesas del restaurante (_Libre_, _Esperando_, _En preparación_, _Listo_, _Ocupada_).
-- **Comandera Digital Interactiva (`CookOrderModal`)**: Popup al hacer clic en mesas con órdenes activas; permite revisar ítems, cantidades, notas especiales de comensales y actualizar el estado de preparación con un solo clic (`PUT /mesas/{num_mesa}/estado`).
-- **Gestión de Inventario en Tiempo Real**: Pestaña dedicada para habilitar o pausar la disponibilidad de platos del catálogo en vivo mediante `PATCH /productos/{id}/disponible`.
-- **Generador e Impresor de Códigos QR**: Configuración de número de mesas (1 a 50 mesas), previsualización de códigos QR individuales y botón de impresión optimizado para mesas y manteles.
+- **Panel de Salón y Mesas**: Cuadrícula dinámica con el estado operativo de todas las mesas del restaurante.
+- **Comandera Digital Interactiva (`CookOrderModal`)**: Popup al hacer clic en mesas con órdenes activas; permite revisar ítems, notas especiales y avanzar de estado con un solo clic.
+- **Gestión de Inventario en Tiempo Real**: Pestaña dedicada para habilitar o pausar la disponibilidad de platos del catálogo en vivo (`PATCH /productos/{id}/disponible`).
+- **Generador e Impresor de Códigos QR**: Configuración de número de mesas (1 a 50 mesas) y generación de códigos QR individuales con enlaces de validación.
 
 ---
 
@@ -55,9 +57,9 @@ El sistema ofrece una experiencia dual sincronizada en tiempo real: una interfaz
 C-est-dou-P-restaurant/
 ├── backend/
 │   ├── database.py         # Conexión Singleton no bloqueante a MongoDB Atlas con Motor
-│   ├── main.py             # Instancia FastAPI, CORS, 13 operaciones NoSQL + Auth y Disponibilidad
+│   ├── main.py             # Instancia FastAPI, CORS, 13 operaciones NoSQL + Auth, Visitas y QR
 │   ├── models.py           # Modelos de datos / entidades de respaldo
-│   ├── test_suite.py       # Suite integral de pruebas automatizadas (8/8 pruebas verificadas)
+│   ├── test_suite.py       # Suite integral de pruebas automatizadas
 │   ├── test_mongo.py       # Script de verificación de conectividad y ping a Atlas
 │   ├── requirements.txt    # Dependencias de Python (FastAPI, Motor, Pymongo, Uvicorn, etc.)
 │   └── .env                # Credenciales MONGO_URI
@@ -69,170 +71,74 @@ C-est-dou-P-restaurant/
     └── src/
         ├── App.jsx         # Enrutador principal (rutas de cliente y personal)
         ├── components/
-        │   ├── client/     # Componentes móviles (BottomNav, CategoryPills, ClientHeader, ProductCard, etc.)
-        │   └── employee/   # Componentes de gestión (CookOrderModal, StaffLoginForm, StaffNavbar)
+        │   ├── client/     # Componentes móviles (ProductCard con badges, ProductDetailModal, BottomNav, etc.)
+        │   └── employee/   # Componentes de gestión (CookOrderModal unificado, StaffLoginForm, StaffNavbar)
         ├── context/
         │   ├── AuthContext.jsx         # Login real contra /empleados/login y roles
-        │   ├── CartContext.jsx         # Carrito temporal y envío async con submitOrderForTable
-        │   └── RestaurantContext.jsx   # Estado global de mesas, catálogo NoSQL y sincronización
+        │   ├── CartContext.jsx         # Carrito temporal, llamar garzón, toasts de agotado/vacío
+        │   └── RestaurantContext.jsx   # Estado global de mesas, catálogo NoSQL, validar QR y visitas
         ├── data/
-        │   └── initialProducts.js      # Catálogo base de respaldo / fallback offline
+        │   └── initialProducts.js      # Catálogo base enriquecido con etiquetas dietéticas
         ├── layouts/
-        │   ├── ClientLayout.jsx        # Contenedor estilo smartphone para clientes QR
+        │   ├── ClientLayout.jsx        # Contenedor smartphone con validación QR y toasts
         │   └── EmployeeLayout.jsx      # Plantilla general con autenticación para empleados
         ├── pages/
-        │   ├── client/     # Vistas de catálogo, carrito y estado de orden
-        │   └── employee/   # Panel de mesas/inventario, login y módulo de códigos QR
+        │   ├── client/     # Vistas de catálogo, carrito y estado de orden con botón garzón
+        │   └── employee/   # Panel de mesas/inventario condicional, login y módulo QR
         └── styles/
-            ├── theme.css    # Paleta de colores, tipografías y variables globales
+            ├── theme.css    # Paleta unificada (.btn-primary Borgoña, .btn-secondary, .badge-tag)
             ├── client.css   # Estilos de la app móvil de clientes
             └── employee.css # Estilos del dashboard de cocina y personal
 ```
 
 ---
 
-## Equivalencias: De Consultas SQL a Operaciones MongoDB (NoSQL)
+## Catálogo de Endpoints de la API
 
-El backend traduce las 13 consultas obligatorias a sintaxis nativa de MongoDB mediante el driver `motor`:
-
-| Nº     | Operación / Endpoint             | Equivalente SQL                         | Implementación MongoDB (Motor)                                        |
-| :----- | :------------------------------- | :-------------------------------------- | :-------------------------------------------------------------------- |
-| **1**  | `POST /mesas`                    | `INSERT INTO mesa`                      | `db.mesas.insert_one(mesa)`                                           |
-| **2**  | `POST /productos`                | `INSERT INTO producto`                  | `db.producto.insert_one(producto)`                                    |
-| **3**  | `POST /pedidos`                  | `INSERT INTO pedido + detalle_pedido`   | `db.pedidos.insert_one(pedido)` con `items` embebidos                 |
-| **4**  | `GET /productos/filtrados`       | `SELECT WHERE precio < ?`               | `db.producto.find({"precio": {"$lt": x}})`                            |
-| **5**  | `GET /pedidos/info-mesas`        | `SELECT con JOIN (3 tablas)`            | Agregación `$lookup` con colección `visitas` para resolver `num_mesa` |
-| **6**  | `GET /pedidos/detalles-platos`   | `SELECT con JOIN (2 tablas)`            | Proyección directa sobre `items` embebidos en `pedidos`               |
-| **7**  | `PUT /mesas/{num_mesa}/estado`   | `UPDATE mesa SET estado = ?`            | `db.mesas.update_one({"num_mesa": n}, {"$set": {"estado": s}})`       |
-| **8**  | `PUT /productos/{id}/precio`     | `UPDATE producto SET precio = ?`        | `db.producto.update_one(filtro, {"$set": {"precio": p}})`             |
-| **9**  | `DELETE /productos/{id}`         | `DELETE FROM producto WHERE id`         | `db.producto.delete_one(filtro)` por `ObjectId` o `id_plato`          |
-| **10** | `DELETE /mesas/{num_mesa}`       | `DELETE FROM mesa WHERE estado='Libre'` | `db.mesas.delete_one({"num_mesa": n, "estado": "Libre"})`             |
-| **11** | `POST /admin/alter-1`            | `ALTER TABLE ADD COLUMN telefono`       | `db.empleados.update_many({}, {"$set": {"telefono": None}})`          |
-| **12** | `DELETE /admin/alter-1/revertir` | `ALTER TABLE DROP COLUMN telefono`      | `db.empleados.update_many({}, {"$unset": {"telefono": ""}})`          |
-| **13** | `DELETE /admin/drop/promociones` | `DROP TABLE promocion_temporada`        | `db.promocion_temporada.drop()`                                       |
-
-### Endpoints Complementarios
-
-- `POST /empleados/login`: Búsqueda flexible por correo, username o rol (`find_one`), devolviendo sesión normalizada para React.
-- `PATCH /productos/{id}/disponible`: Actualización atómica de `disponibilidad` (`"En stock"` o `"Agotado"`).
-- `POST /admin/alter-2` y `DELETE /admin/alter-2/revertir`: Agrega o remueve el atributo `fecha_entrega` en `pedidos`.
-- `POST /admin/preparar-temporada`: Inicializa la colección temporal con documento semilla.
-
----
-
-## Base de Datos (MongoDB Atlas)
-
-El clúster en la nube aloja la base de datos `restaurante_db` organizada en las siguientes colecciones:
-
-- **`mesas`**: Control de mesas y estado (`num_mesa`, `estado`, `piso`).
-- **`producto`**: Catálogo de la carta (`_id`, `id_plato`, `nombre`, `categoria`, `precio`, `disponibilidad`, `tiempo_preparacion`, `imagen`, `descripcion`).
-- **`pedidos`**: Comandas con ítems embebidos (`num_mesa`, `hora_pedido`, `estado_pedido`, `items: [{ producto_id, nombre, precio_unitario, cantidad, observaciones }]`, `subtotal`).
-- **`visitas`**: Control de sesiones de comensales en mesa (`id_visita`, `num_mesa`, `hora_inicio`, `estado_visita`, `pagos`).
-- **`empleados`**: Personal con credenciales y roles (`nombre`, `correo`, `rol`, `password_hash`).
-- **`promocion_temporada`**: Colección temporal demostrativa para operaciones de ciclo de vida (`drop()`).
+| Endpoint | Método | Tag | Descripción |
+| :--- | :--- | :--- | :--- |
+| `/empleados/login` | `POST` | Auth | Autentica empleados y retorna rol de acceso |
+| `/mesas` | `POST` | 1. INSERT | Crea nueva mesa con número, estado y piso |
+| `/productos` | `POST` | 1. INSERT | Registra plato con `etiquetas`, tiempo y precio |
+| `/pedidos` | `POST` | 1. INSERT | Inserta pedido con `items` en snapshot y `visita_id` |
+| `/visitas` | `POST` | Visita | Inicia nueva visita para comensales en mesa |
+| `/productos/filtrados` | `GET` | 2. SELECT | Consulta catálogo de productos con sus etiquetas |
+| `/pedidos/info-mesas` | `GET` | 2. SELECT | Retorna comanda activa más reciente por mesa |
+| `/pedidos/detalles-platos` | `GET` | 2. SELECT | Retorna items embebidos en los pedidos |
+| `/mesas/{num_mesa}/estado` | `PUT` | 3. UPDATE | Sincroniza estado de mesa y pedidos activos |
+| `/mesas/{num_mesa}/liberar` | `POST` | 3. UPDATE | Libera mesa y finaliza pedidos anteriores |
+| `/productos/{id}/precio` | `PUT` | 3. UPDATE | Actualiza precio unitario del producto |
+| `/productos/{id}/disponible` | `PATCH` | 3. UPDATE | Activa o pausa disponibilidad en carta |
+| `/visitas/{id}/llamar-garzon` | `PATCH` | Visita | Marca `solicitud_garzon.activa = True` (RF-08) |
+| `/mesas/{num}/validar-qr` | `GET` | Mesa | Valida token QR; retorna 403 si no coincide |
+| `/productos/{id}` | `DELETE` | 4. DELETE | Elimina plato por ObjectId o id_plato |
+| `/mesas/{num_mesa}` | `DELETE` | 4. DELETE | Elimina mesa si su estado es 'Libre' |
+| `/admin/alter-1` | `POST` | 5. ALTER/DROP | Agrega atributo `telefono` a empleados |
+| `/admin/alter-1/revertir` | `DELETE` | 5. ALTER/DROP | Elimina atributo `telefono` de empleados |
+| `/admin/alter-2` | `POST` | 5. ALTER/DROP | Agrega atributo `fecha_entrega` a pedidos |
+| `/admin/alter-2/revertir` | `DELETE` | 5. ALTER/DROP | Elimina atributo `fecha_entrega` de pedidos |
+| `/admin/preparar-temporada` | `POST` | 5. ALTER/DROP | Crea colección promocional semilla |
+| `/admin/drop/promociones` | `DELETE` | 5. ALTER/DROP | Elimina colección promocional (DROP) |
 
 ---
 
 ## Configuración y Ejecución
 
-### Prerrequisitos
-
-- **Python 3.10+**
-- **Node.js 18+** y **pnpm** (o npm)
-
----
-
 ### 1. Backend (FastAPI + MongoDB Atlas)
-
-1. Ingresa a la carpeta del backend:
-
-   ```bash
-   cd backend
-   ```
-
-2. Crea y activa tu entorno virtual:
-   - **En Windows (PowerShell):**
-     ```powershell
-     python -m venv venv
-     .\venv\Scripts\Activate.ps1
-     ```
-   - **En Linux / macOS:**
-     ```bash
-     python3 -m venv venv
-     source venv/bin/activate
-     ```
-
-3. Instala las dependencias:
-
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-4. Configura las variables de entorno en `backend/.env`:
-
-   ```env
-   MONGO_URI=mongodb+srv://<usuario>:<password>@cluster.mongodb.net/restaurante_db?retryWrites=true&w=majority
-   ```
-
-5. _(Opcional)_ Ejecuta la suite de verificación automatizada:
-
-   ```bash
-   python test_suite.py
-   ```
-
-   Debe arrojar `8/8 PRUEBAS EXITOSAS`.
-
-6. Inicia el servidor de desarrollo:
-   ```bash
-   uvicorn main:app --reload --port 8000
-   ```
-   Accede a la documentación interactiva Swagger en: `http://localhost:8000/docs`.
-
----
+```bash
+cd backend
+python -m venv venv
+.\venv\Scripts\Activate.ps1   # En Windows
+pip install -r requirements.txt
+uvicorn main:app --reload --port 8000
+```
+Swagger UI disponible en: `http://localhost:8000/docs`.
 
 ### 2. Frontend (React 19 + Vite)
-
-1. En una nueva terminal, ingresa a la carpeta del frontend:
-
-   ```bash
-   cd frontend
-   ```
-
-2. Configura la URL del backend en `frontend/.env`:
-
-   ```env
-   VITE_API_URL=http://localhost:8000
-   ```
-
-3. Instala los paquetes:
-
-   ```bash
-   pnpm install
-   # o bien: npm install
-   ```
-
-4. Inicia el servidor Vite:
-   ```bash
-   pnpm dev
-   # o bien: npm run dev
-   ```
-   La aplicación se abrirá en `http://localhost:5173`.
-
----
-
-## Rutas y Flujo de Uso
-
-| Ruta                 | Audiencia         | Descripción                                                                                                                |
-| :------------------- | :---------------- | :------------------------------------------------------------------------------------------------------------------------- |
-| `/`                  | Personal / Cocina | Portal principal para empleados. Solicita login autenticado contra MongoDB y da acceso a la comandera, salón e inventario. |
-| `/staff/qrs`         | Personal / Admin  | Generador e impresor de códigos QR por mesa.                                                                               |
-| `/mesa/:numeroMesa`  | Clientes (QR)     | Vista exclusiva tipo smartphone para clientes de la mesa indicada (ej. `/mesa/1`, `/mesa/2`).                              |
-| `/menu` / `/cliente` | Clientes          | Accesos rápidos de redirección a mesa para pruebas.                                                                        |
-
-### Flujo de Prueba Recomendado
-
-1. Abre `http://localhost:5173/` e inicia sesión como Administrador (`admin@restaurant.cl`) o Cocinero.
-2. Abre en otra pestaña o ventana de incógnito la ruta del cliente `http://localhost:5173/mesa/1`.
-3. Desde la mesa 1, agrega platillos al carrito, añade observaciones para cocina y pulsa **Confirmar Pedido**.
-4. En el panel de cocina verás la comanda reflejada en tiempo real desde MongoDB Atlas con sus items embebidos.
-5. Cambia el estado de la mesa a **En preparación** o **Listo** y comprueba cómo se actualiza automáticamente el monitor del cliente.
+```bash
+cd frontend
+pnpm install
+pnpm dev
+```
+Aplicación disponible en: `http://localhost:5173`.
+Compilación de producción verificada con: `pnpm build`.

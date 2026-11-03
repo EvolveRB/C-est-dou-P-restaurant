@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { X, Clock, Plus, Minus, ChefHat, Ban } from 'lucide-react';
+import { X, Clock, Plus, Minus, ChefHat, Ban, Tag } from 'lucide-react';
 import PlaceholderIcon from './PlaceholderIcon';
 import { formatPrice } from '../../data/initialProducts';
 import { useCart } from '../../context/CartContext';
@@ -12,12 +12,14 @@ export default function ProductDetailModal({ product, onClose }) {
   if (!product) return null;
 
   const isAvailable = product.disponible !== false;
+  const etiquetas = Array.isArray(product.etiquetas) ? product.etiquetas : [];
 
   const handleAdd = (e) => {
     if (e && e.stopPropagation) e.stopPropagation();
-    if (!isAvailable) return;
-    addToCart(product, qty, notes);
-    onClose();
+    const added = addToCart(product, qty, notes);
+    if (added) {
+      onClose();
+    }
   };
 
   const itemSubtotal = Number(product.precio ?? 0) * (qty || 1);
@@ -27,9 +29,11 @@ export default function ProductDetailModal({ product, onClose }) {
       <div className="modal-sheet" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
           <div>
-            <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--c-terracotta)', textTransform: 'uppercase' }}>
-              {product.categoria}
-            </span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--c-terracotta)', textTransform: 'uppercase' }}>
+                {product.categoria}
+              </span>
+            </div>
             <h2 style={{ fontSize: '20px', fontWeight: 800, color: 'var(--c-burgundy-800)', marginTop: '2px' }}>
               {product.nombre}
             </h2>
@@ -38,6 +42,18 @@ export default function ProductDetailModal({ product, onClose }) {
             <X size={18} />
           </button>
         </div>
+
+        {/* RF-05: Badges visuales de etiquetas */}
+        {etiquetas.length > 0 && (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginBottom: '12px' }}>
+            {etiquetas.map((tag, idx) => (
+              <span key={idx} className="badge-tag" style={{ fontSize: '11px', padding: '3px 8px' }}>
+                <Tag size={10} />
+                {tag}
+              </span>
+            ))}
+          </div>
+        )}
 
         <div style={{
           width: '100%',
@@ -48,7 +64,8 @@ export default function ProductDetailModal({ product, onClose }) {
           alignItems: 'center',
           justifyContent: 'center',
           marginBottom: '14px',
-          position: 'relative'
+          position: 'relative',
+          overflow: 'hidden'
         }}>
           {!isAvailable && (
             <div style={{
@@ -62,13 +79,22 @@ export default function ProductDetailModal({ product, onClose }) {
               display: 'flex',
               alignItems: 'center',
               gap: '6px',
-              boxShadow: '0 4px 12px rgba(0,0,0,0.2)'
+              boxShadow: '0 4px 12px rgba(0,0,0,0.2)',
+              zIndex: 3
             }}>
               <Ban size={15} />
               <span>Plato no disponible / Agotado</span>
             </div>
           )}
-          <PlaceholderIcon className="placeholder-icon" style={{ width: '56px', height: '56px' }} />
+          {product.imagen ? (
+            <img
+              src={product.imagen}
+              alt={product.nombre}
+              style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+            />
+          ) : (
+            <PlaceholderIcon className="placeholder-icon" style={{ width: '56px', height: '56px' }} />
+          )}
         </div>
 
         <p style={{ fontSize: '13.5px', color: 'var(--c-text-muted)', lineHeight: '1.45', marginBottom: '16px' }}>
@@ -148,13 +174,17 @@ export default function ProductDetailModal({ product, onClose }) {
           </div>
         </div>
 
+        {/* Botón de acción unificado */}
         <button
-          className="modal-action-btn"
+          className="btn-primary"
           onClick={handleAdd}
           disabled={!isAvailable}
           style={{
-            backgroundColor: isAvailable ? 'var(--c-burgundy-800)' : '#9CA3AF',
-            cursor: isAvailable ? 'pointer' : 'not-allowed'
+            width: '100%',
+            marginTop: '16px',
+            borderRadius: '14px',
+            padding: '13px',
+            backgroundColor: isAvailable ? 'var(--c-burgundy-800)' : '#9CA3AF'
           }}
         >
           {isAvailable ? (
