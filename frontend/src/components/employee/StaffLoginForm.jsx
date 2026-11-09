@@ -1,8 +1,10 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 
 export default function StaffLoginForm() {
   const { login, loading } = useAuth();
+  const navigate = useNavigate();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -16,7 +18,19 @@ export default function StaffLoginForm() {
     setError('');
     const res = await login(username, password);
     if (!res?.success) {
-      setError(res?.error || 'Usuario o contraseña incorrectos');
+      const type = res?.errorType;
+      const friendlyMessage =
+        type === 'database_error'
+          ? 'No se pudo iniciar sesión porque hubo un error en la base de datos.'
+          : type === 'backend_down'
+            ? 'No se pudo iniciar sesión porque el backend no está levantado o no responde.'
+            : type === 'backend_error'
+              ? 'No se pudo iniciar sesión por un error del backend.'
+              : 'Datos incorrectos. Revisa usuario y contraseña.';
+
+      setError(res?.error || friendlyMessage);
+    } else {
+      navigate('/', { replace: true });
     }
   };
 
@@ -100,7 +114,7 @@ export default function StaffLoginForm() {
                   color: '#334155'
                 }}
               >
-                👑 Admin
+                Admin
               </button>
               <button
                 type="button"
@@ -116,7 +130,7 @@ export default function StaffLoginForm() {
                   color: '#334155'
                 }}
               >
-                🍳 Cocina
+                Cocina
               </button>
               <button
                 type="button"
@@ -132,7 +146,7 @@ export default function StaffLoginForm() {
                   color: '#334155'
                 }}
               >
-                📋 Garzón
+                Garzón
               </button>
             </div>
           </div>

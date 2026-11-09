@@ -1,10 +1,38 @@
-import PlaceholderIcon from './PlaceholderIcon';
+import { useState, useEffect } from 'react';
 import { formatPrice } from '../../data/initialProducts';
-import { Plus, Ban } from 'lucide-react';
+import { Plus, Ban, UtensilsCrossed } from 'lucide-react';
 import { useCart } from '../../context/CartContext';
 
-export default function ProductCard({ product, onOpenDetail }) {
+function formatDishUrl(src) {
+  if (!src) return '/plato_alpha.jpg';
+  if (src.startsWith('http://') || src.startsWith('https://') || src.startsWith('data:')) {
+    return src;
+  }
+  const clean = src.replace(/^\/+/, '');
+  return `/${clean}`;
+}
+
+export default function ProductCard({ product, onOpenDetail, onSelectTag }) {
   const { addToCart } = useCart();
+  const [imgError, setImgError] = useState(false);
+  const [currentSrc, setCurrentSrc] = useState(() => formatDishUrl(product.imagen));
+
+  useEffect(() => {
+    setCurrentSrc(formatDishUrl(product.imagen));
+    setImgError(false);
+  }, [product.imagen]);
+
+  const handleImgError = () => {
+    if (currentSrc && !currentSrc.startsWith('/Imagenes/')) {
+      const clean = currentSrc.replace(/^\/+/, '');
+      setCurrentSrc(`/Imagenes/${clean}`);
+    } else if (currentSrc !== '/plato_alpha.jpg') {
+      setCurrentSrc('/plato_alpha.jpg');
+    } else {
+      setImgError(true);
+    }
+  };
+
   const isAvailable = product.disponible !== false;
   const etiquetas = Array.isArray(product.etiquetas) ? product.etiquetas : [];
 
@@ -44,14 +72,24 @@ export default function ProductCard({ product, onOpenDetail }) {
             Agotado
           </span>
         )}
-        {product.imagen ? (
+        {currentSrc && !imgError ? (
           <img
-            src={product.imagen}
+            src={currentSrc}
             alt={product.nombre}
+            onError={handleImgError}
             style={{ width: '100%', height: '100%', objectFit: 'cover' }}
           />
         ) : (
-          <PlaceholderIcon />
+          <div style={{
+            width: '100%',
+            height: '100%',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            backgroundColor: 'var(--c-terracotta-light)'
+          }}>
+            <UtensilsCrossed size={28} color="var(--c-terracotta)" />
+          </div>
         )}
       </div>
 
@@ -61,11 +99,22 @@ export default function ProductCard({ product, onOpenDetail }) {
         </h2>
         <p className="product-description">{product.descripcion}</p>
 
-        {/* RF-05: Badges visuales de etiquetas (ej. 'Vegetariano', 'Sin Gluten') */}
+        {/* RF-05: Badges visuales de etiquetas (sin emojis) */}
         {etiquetas.length > 0 && (
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', margin: '4px 0 2px' }}>
             {etiquetas.slice(0, 2).map((tag, idx) => (
-              <span key={idx} className="badge-tag">
+              <span
+                key={idx}
+                className="badge-tag"
+                onClick={(e) => {
+                  if (onSelectTag) {
+                    e.stopPropagation();
+                    const isGluten = tag.toLowerCase().includes('gluten') || tag.toLowerCase().includes('tacc');
+                    onSelectTag(isGluten ? 'Libre de gluten' : tag);
+                  }
+                }}
+                title={`Filtrar por ${tag}`}
+              >
                 {tag}
               </span>
             ))}

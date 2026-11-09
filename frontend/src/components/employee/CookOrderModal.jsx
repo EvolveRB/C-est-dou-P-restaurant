@@ -67,9 +67,6 @@ export default function CookOrderModal({ table, mesa, onClose, onUpdateStatus })
               <span style={{ fontSize: '11px', fontWeight: 800, color: 'var(--c-terracotta)', textTransform: 'uppercase', letterSpacing: '0.8px' }}>
                 Comanda de Cocina
               </span>
-              <span style={{ fontSize: '11px', background: '#EAE1D7', color: '#5A524A', padding: '2px 8px', borderRadius: '6px', fontWeight: 700 }}>
-                {pedido.id}
-              </span>
             </div>
             <h2 style={{ fontSize: '22px', fontWeight: 800, color: '#1F242E', marginTop: '2px' }}>
               Mesa {id}
@@ -165,6 +162,11 @@ export default function CookOrderModal({ table, mesa, onClose, onUpdateStatus })
                           <img
                             src={itemImg}
                             alt={name}
+                            onError={(e) => {
+                              if (itemImg.startsWith('/Imagenes/')) {
+                                e.currentTarget.src = itemImg.replace('/Imagenes/', '/');
+                              }
+                            }}
                             style={{ width: '40px', height: '40px', borderRadius: '8px', objectFit: 'cover' }}
                           />
                         ) : (

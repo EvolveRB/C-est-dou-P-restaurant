@@ -14,7 +14,7 @@ app = FastAPI(
 )
 
 # ==============================================================================
-# CORS — permite peticiones desde Vite (dev y preview)
+# CORS — permite peticiones locales, túneles y dominios en la nube (Railway)
 # ==============================================================================
 app.add_middleware(
     CORSMiddleware,
@@ -23,7 +23,9 @@ app.add_middleware(
         "http://localhost:4173",   # Vite preview
         "http://127.0.0.1:5173",
         "http://127.0.0.1:4173",
+        "https://imprecise-hammock-rigid.ngrok-free.dev", # Túnel ngrok activo
     ],
+    allow_origin_regex=r"https?://.*",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -37,13 +39,35 @@ if not os.path.exists(imagenes_dir):
     os.makedirs(imagenes_dir, exist_ok=True)
 app.mount("/Imagenes", StaticFiles(directory=imagenes_dir), name="imagenes")
 
+# Mapeo por defecto de imágenes según el nombre del platillo
+MAPA_IMAGENES_DEFAULT = {
+    "plato principal alpha": "plato_alpha.jpg",
+    "entrada especial beta": "entrada_beta.jpg",
+    "sopa tradicional gamma": "sopa_gamma.jpg",
+    "corte de carne delta": "corte_delta.jpg",
+    "pasta artesanal epsilon": "pasta_epsilon.jpg",
+    "postre tentación zeta": "postreUV.jpeg",
+    "carpaccio de res trufado": "carpaccio_trufado.jpg",
+    "bisque de mariscos del puerto": "bisque_mariscos.jpg",
+    "ravioles de ricotta y nueces": "ravioles_ricotta.jpg",
+    "limonada menta jengibre": "limonada_menta.jpg",
+    "copa de vino reserva syrah": "vino_reserva.jpg"
+}
+
 # ==============================================================================
 # HELPERS — serialización y búsqueda flexible
 # ==============================================================================
 def serializar_doc(doc: dict) -> dict:
-    """Convierte el _id de ObjectId a string y normaliza campos."""
-    if doc and "_id" in doc:
-        doc["_id"] = str(doc["_id"])
+    """Convierte cualquier ObjectId (como _id o id_pedido) a string y normaliza campos."""
+    if not doc or not isinstance(doc, dict):
+        return doc
+    for k, v in list(doc.items()):
+        if isinstance(v, ObjectId):
+            doc[k] = str(v)
+        elif isinstance(v, dict):
+            doc[k] = serializar_doc(v)
+        elif isinstance(v, list):
+            doc[k] = [serializar_doc(i) if isinstance(i, dict) else str(i) if isinstance(i, ObjectId) else i for i in v]
     return doc
 
 def build_producto_filter(id_producto: str) -> dict:
@@ -57,7 +81,7 @@ def build_producto_filter(id_producto: str) -> dict:
             return {"_id": id_producto}
 
 async def build_mesa_pedidos_filter(num_mesa: int, db) -> dict:
-    """Construye un filtro para pedidos de una mesa, incluyendo int y str y los que vienen por id_visita (migrados de Turso)."""
+    """Construye un filtro para pedidos de una mesa, incluyendo int y str y los que vienen por id_visita."""
     mesa_conditions = [{"num_mesa": num_mesa}, {"num_mesa": str(num_mesa)}]
     try:
         visitas_docs = await db.visitas.find(
@@ -76,7 +100,6 @@ async def build_mesa_pedidos_filter(num_mesa: int, db) -> dict:
 # MODELOS PYDANTIC — Alineados con esquema final MongoDB Atlas
 # ==============================================================================
 
-# ── Mesa ──────────────────────────────────────────────────────────────────────
 class MesaCreate(BaseModel):
     num_mesa: int
     estado: str = "Libre"
@@ -87,7 +110,6 @@ class MesaCreate(BaseModel):
 class MesaUpdateEstado(BaseModel):
     estado: str
 
-# ── Producto ──────────────────────────────────────────────────────────────────
 class ProductoCreate(BaseModel):
     nombre: str
     categoria: str = "Platos de Fondo"
@@ -102,9 +124,8 @@ class ProductoUpdatePrecio(BaseModel):
     precio: float
 
 class ProductoDisponibilidad(BaseModel):
-    disponible: bool  # True -> "En stock" | False -> "Agotado"
+    disponible: bool
 
-# ── Pedido (items con patrón snapshot) ────────────────────────────────────────
 class ItemPedido(BaseModel):
     producto_id: Optional[str] = "1"
     nombre: Optional[str] = "Plato"
@@ -121,7 +142,6 @@ class PedidoCreate(BaseModel):
     items: Optional[List[ItemPedido]] = []
     notas: Optional[str] = None
 
-# ── Visita ────────────────────────────────────────────────────────────────────
 class SolicitudGarzon(BaseModel):
     activa: bool = False
     hora_solicitud: Optional[str] = None
@@ -142,7 +162,6 @@ class VisitaCreate(BaseModel):
 class LlamarGarzonInput(BaseModel):
     motivo: str = "Necesito atención"
 
-# ── Auth ──────────────────────────────────────────────────────────────────────
 class LoginInput(BaseModel):
     username: str
     password: str
@@ -153,78 +172,135 @@ class LoginInput(BaseModel):
 # ==============================================================================
 @app.post("/empleados/login", tags=["Auth"])
 async def login_empleado(creds: LoginInput, db=Depends(get_db)):
-    """
-    Autentica a un empleado buscando por correo, username o nombre en la colección 'empleados'.
-    """
+    """Autentica a un empleado consultando MongoDB y validando la contraseña."""
     try:
-        username_clean = creds.username.strip()
+        username_clean = (creds.username or "").strip()
+        password_clean = (creds.password or "").strip()
+
+        if not username_clean or not password_clean:
+            raise HTTPException(status_code=401, detail="CREDENCIALES_INCORRECTAS")
+
         filtro = {
             "$or": [
                 {"correo": username_clean},
                 {"username": username_clean},
-                {"nombre": {"$regex": f"^{username_clean}$", "$options": "i"}},
-                {"rol": {"$regex": f"^{username_clean}$", "$options": "i"}}
+                {"nombre": {"$regex": f"^{username_clean}$", "$options": "i"}}
             ]
         }
-        empleado = None
+
         try:
-            empleado = await db.empleados.find_one(filtro, {"password": 0})
+            empleado = await db.empleados.find_one(filtro)
         except Exception as db_err:
-            print(f"[AUTH WARN] Error consultando MongoDB: {db_err}")
-        
+            print(f"[AUTH ERROR] Error consultando MongoDB: {db_err}")
+            raise HTTPException(status_code=503, detail="ERROR_BASE_DE_DATOS") from db_err
+
         u_lower = username_clean.lower()
         if not empleado and u_lower in ["admin", "administrador", "gerente", "admin@restaurant.cl"]:
             try:
-                empleado = await db.empleados.find_one({"rol": "Administrador"}, {"password": 0})
+                empleado = await db.empleados.find_one({"rol": "Administrador"})
             except Exception:
                 pass
-            if not empleado:
-                empleado = {
-                    "id_empleado": 1,
-                    "nombre": "Administrador",
-                    "apellido": "Sistema",
-                    "correo": "admin@restaurant.cl",
-                    "username": "admin",
-                    "rol": "Administrador"
-                }
         elif not empleado and u_lower in ["cocinero", "cocina", "chef", "chef@restaurant.cl", "cocina@restaurant.cl"]:
             try:
-                empleado = await db.empleados.find_one({"rol": "Cocinero"}, {"password": 0})
+                empleado = await db.empleados.find_one({"rol": "Cocinero"})
             except Exception:
                 pass
-            if not empleado:
-                empleado = {
-                    "id_empleado": 2,
-                    "nombre": "Chef",
-                    "apellido": "Ejecutivo",
-                    "correo": "chef@restaurant.cl",
-                    "username": "cocinero",
-                    "rol": "Cocinero"
-                }
         elif not empleado and u_lower in ["garzon", "garzón", "mesero", "mesero@restaurant.cl"]:
             try:
-                empleado = await db.empleados.find_one({"rol": "Garzón"}, {"password": 0})
+                empleado = await db.empleados.find_one({"rol": "Garzón"})
             except Exception:
                 pass
-            if not empleado:
-                empleado = {
-                    "id_empleado": 3,
-                    "nombre": "Garzón",
-                    "apellido": "Salón",
-                    "correo": "mesero@restaurant.cl",
-                    "username": "mesero",
-                    "rol": "Garzón"
-                }
 
         if not empleado:
-            raise HTTPException(status_code=401, detail="Usuario o contraseña incorrectos")
+            raise HTTPException(status_code=401, detail="CREDENCIALES_INCORRECTAS")
 
+        stored_password = empleado.get("password")
+        if stored_password is None:
+            raise HTTPException(status_code=401, detail="CREDENCIALES_INCORRECTAS")
+
+        stored_password_str = str(stored_password)
+        provided_password_str = str(password_clean)
+
+        password_matches = stored_password_str == provided_password_str
+        if not password_matches:
+            raise HTTPException(status_code=401, detail="CREDENCIALES_INCORRECTAS")
+
+        empleado.pop("password", None)
         empleado["cargo"] = empleado.get("rol", empleado.get("cargo", "Mesero"))
         return serializar_doc(empleado)
     except HTTPException:
         raise
     except Exception as e:
+        print(f"[AUTH ERROR] Error inesperado en login: {e}")
+        raise HTTPException(status_code=500, detail="ERROR_BACKEND")
+
+
+# ==============================================================================
+# EMPLEADOS — Gestión CRUD para Panel de Administrador
+# ==============================================================================
+@app.get("/empleados", tags=["Empleados"])
+async def listar_empleados(db=Depends(get_db)):
+    try:
+        cursor = db.empleados.find({}, {"password": 0})
+        empleados = await cursor.to_list(length=100)
+        return [serializar_doc(emp) for emp in empleados]
+    except Exception as e:
         raise HTTPException(status_code=500, detail=repr(e))
+
+
+@app.post("/empleados", tags=["Empleados"])
+async def crear_empleado(emp: dict = Body(...), db=Depends(get_db)):
+    try:
+        emp_dict = dict(emp)
+        # Limpiar IDs temporales de frontend para que Mongo asigne su _id real
+        emp_dict.pop("_id", None)
+        emp_dict.pop("id", None)
+
+        if not emp_dict.get("rol"):
+            emp_dict["rol"] = emp_dict.get("cargo", "Garzón")
+        if not emp_dict.get("cargo"):
+            emp_dict["cargo"] = emp_dict.get("rol", "Garzón")
+
+        resultado = await db.empleados.insert_one(emp_dict)
+        emp_dict["_id"] = str(resultado.inserted_id)
+        return {"mensaje": "Empleado creado", "empleado": emp_dict, "id": str(resultado.inserted_id)}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=repr(e))
+
+
+@app.patch("/empleados/{id_empleado}/rol", tags=["Empleados"])
+async def actualizar_rol_empleado(id_empleado: str, data: dict = Body(...), db=Depends(get_db)):
+    try:
+        new_role = data.get("rol") or data.get("cargo") or "Garzón"
+        filtro = {}
+        try:
+            filtro = {"_id": ObjectId(id_empleado)}
+        except Exception:
+            filtro = {"$or": [{"_id": id_empleado}, {"id": id_empleado}, {"id_empleado": id_empleado}]}
+
+        resultado = await db.empleados.update_one(
+            filtro,
+            {"$set": {"rol": new_role, "cargo": new_role}}
+        )
+        return {"mensaje": "Rol actualizado", "modificados": resultado.modified_count}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=repr(e))
+
+
+@app.delete("/empleados/{id_empleado}", tags=["Empleados"])
+async def eliminar_empleado(id_empleado: str, db=Depends(get_db)):
+    try:
+        filtro = {}
+        try:
+            filtro = {"_id": ObjectId(id_empleado)}
+        except Exception:
+            filtro = {"$or": [{"_id": id_empleado}, {"id": id_empleado}, {"id_empleado": id_empleado}]}
+
+        resultado = await db.empleados.delete_one(filtro)
+        return {"mensaje": "Empleado eliminado", "eliminados": resultado.deleted_count}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=repr(e))
+
 
 
 # ==============================================================================
@@ -232,7 +308,6 @@ async def login_empleado(creds: LoginInput, db=Depends(get_db)):
 # ==============================================================================
 @app.post("/mesas", tags=["1. INSERT (3)"])
 async def crear_mesa(mesa: MesaCreate, db=Depends(get_db)):
-    """Inserta un nuevo documento en la colección 'mesas'."""
     try:
         resultado = await db.mesas.insert_one(mesa.model_dump())
         return {"mensaje": "Mesa creada", "id": str(resultado.inserted_id)}
@@ -242,7 +317,6 @@ async def crear_mesa(mesa: MesaCreate, db=Depends(get_db)):
 
 @app.post("/productos", tags=["1. INSERT (3)"])
 async def crear_producto(producto: ProductoCreate, db=Depends(get_db)):
-    """Inserta un nuevo documento en la colección 'producto'."""
     try:
         resultado = await db.producto.insert_one(producto.model_dump())
         return {"mensaje": "Producto creado", "id": str(resultado.inserted_id)}
@@ -252,10 +326,6 @@ async def crear_producto(producto: ProductoCreate, db=Depends(get_db)):
 
 @app.post("/pedidos", tags=["1. INSERT (3)"])
 async def crear_pedido(pedido: PedidoCreate, db=Depends(get_db)):
-    """
-    Inserta un pedido con items embebidos en la colección 'pedidos'.
-    Calcula subtotal y total automáticamente y actualiza la mesa a 'Pendiente'.
-    """
     try:
         pedido_dict = pedido.model_dump()
         try:
@@ -264,7 +334,12 @@ async def crear_pedido(pedido: PedidoCreate, db=Depends(get_db)):
             pass
 
         if not pedido_dict.get("hora_pedido"):
-            pedido_dict["hora_pedido"] = datetime.now().strftime("%H:%M")
+            try:
+                from datetime import timezone, timedelta
+                chile_tz = timezone(timedelta(hours=-3))
+                pedido_dict["hora_pedido"] = datetime.now(chile_tz).strftime("%H:%M")
+            except Exception:
+                pedido_dict["hora_pedido"] = datetime.now().strftime("%H:%M")
 
         items_list = pedido_dict.get("items") or []
         subtotal = sum(
@@ -294,12 +369,8 @@ async def crear_pedido(pedido: PedidoCreate, db=Depends(get_db)):
         raise HTTPException(status_code=500, detail=repr(e))
 
 
-# ==============================================================================
-# INSERT — Visitas
-# ==============================================================================
 @app.post("/visitas", tags=["Visita"])
 async def crear_visita(visita: VisitaCreate, db=Depends(get_db)):
-    """Crea una nueva visita para una mesa."""
     try:
         visita_dict = visita.model_dump()
         if not visita_dict.get("hora_inicio"):
@@ -325,9 +396,6 @@ async def crear_visita(visita: VisitaCreate, db=Depends(get_db)):
 # ==============================================================================
 @app.get("/productos/filtrados", tags=["2. SELECT (3)"])
 async def select_productos_por_precio(precio_maximo: float = 10000, db=Depends(get_db)):
-    """
-    Obtiene los productos con precio menor al filtro desde la colección 'producto'.
-    """
     try:
         cursor = db.producto.find(
             {"precio": {"$lt": precio_maximo}},
@@ -336,6 +404,20 @@ async def select_productos_por_precio(precio_maximo: float = 10000, db=Depends(g
              "etiquetas": 1}
         )
         docs = await cursor.to_list(length=200)
+
+        for d in docs:
+            if not d.get("imagen") and d.get("nombre"):
+                nom_norm = d["nombre"].strip().lower()
+                if nom_norm in MAPA_IMAGENES_DEFAULT:
+                    d["imagen"] = MAPA_IMAGENES_DEFAULT[nom_norm]
+                    try:
+                        await db.producto.update_one(
+                            {"_id": d["_id"]},
+                            {"$set": {"imagen": MAPA_IMAGENES_DEFAULT[nom_norm]}}
+                        )
+                    except Exception:
+                        pass
+
         return [serializar_doc(d) for d in docs]
     except Exception as e:
         raise HTTPException(status_code=500, detail=repr(e))
@@ -343,9 +425,6 @@ async def select_productos_por_precio(precio_maximo: float = 10000, db=Depends(g
 
 @app.get("/pedidos/info-mesas", tags=["2. SELECT (3)"])
 async def select_pedidos_info_mesas(db=Depends(get_db)):
-    """
-    Retorna el pedido activo más reciente para cada mesa con items embebidos y notas.
-    """
     try:
         pipeline = [
             {
@@ -410,14 +489,8 @@ async def select_pedidos_info_mesas(db=Depends(get_db)):
 
 @app.get("/pedidos/detalles-platos", tags=["2. SELECT (3)"])
 async def select_detalles_platos(db=Depends(get_db)):
-    """
-    Retorna los items embebidos de los pedidos.
-    """
     try:
-        cursor = db.pedidos.find(
-            {},
-            {"_id": 1, "num_mesa": 1, "items": 1}
-        )
+        cursor = db.pedidos.find({}, {"_id": 1, "num_mesa": 1, "items": 1})
         docs = await cursor.to_list(length=200)
         return [serializar_doc(d) for d in docs]
     except Exception as e:
@@ -429,7 +502,6 @@ async def select_detalles_platos(db=Depends(get_db)):
 # ==============================================================================
 @app.put("/mesas/{num_mesa}/estado", tags=["3. UPDATE (2)"])
 async def update_estado_mesa(num_mesa: int, update_data: MesaUpdateEstado, db=Depends(get_db)):
-    """Actualiza el estado de una mesa y sincroniza sus pedidos en tiempo real."""
     try:
         nuevo_estado = update_data.estado
         await db.mesas.update_one(
@@ -460,7 +532,6 @@ async def update_estado_mesa(num_mesa: int, update_data: MesaUpdateEstado, db=De
 
 @app.post("/mesas/{num_mesa}/liberar", tags=["3. UPDATE (2)"])
 async def liberar_mesa(num_mesa: int, db=Depends(get_db)):
-    """Libera una mesa y finaliza cualquier pedido previo para iniciar desde cero."""
     try:
         await db.mesas.update_one(
             {"$or": [{"num_mesa": num_mesa}, {"num_mesa": str(num_mesa)}]},
@@ -481,7 +552,6 @@ async def liberar_mesa(num_mesa: int, db=Depends(get_db)):
 
 @app.put("/productos/{id_producto}/precio", tags=["3. UPDATE (2)"])
 async def update_precio_producto(id_producto: str, update_data: ProductoUpdatePrecio, db=Depends(get_db)):
-    """Actualiza el precio de un producto por ObjectId o id_plato."""
     try:
         filtro = build_producto_filter(id_producto)
         resultado = await db.producto.update_one(
@@ -490,7 +560,7 @@ async def update_precio_producto(id_producto: str, update_data: ProductoUpdatePr
         )
         if resultado.matched_count == 0:
             raise HTTPException(status_code=404, detail="Producto no encontrado")
-        return {"mensaje": f"Precio del producto '{id_producto}' actualizado a {update_data.precio}"}
+        return {"mensaje": f"Precio actualizado a {update_data.precio}"}
     except HTTPException:
         raise
     except Exception as e:
@@ -499,10 +569,6 @@ async def update_precio_producto(id_producto: str, update_data: ProductoUpdatePr
 
 @app.patch("/productos/{id_producto}/disponible", tags=["3. UPDATE (2)"])
 async def toggle_disponibilidad_producto(id_producto: str, data: ProductoDisponibilidad, db=Depends(get_db)):
-    """
-    Activa o desactiva un producto del menú (cocinero).
-    Actualiza la colección 'producto'.
-    """
     try:
         disponibilidad_str = "En stock" if data.disponible else "Agotado"
         filtro = build_producto_filter(id_producto)
@@ -513,7 +579,7 @@ async def toggle_disponibilidad_producto(id_producto: str, data: ProductoDisponi
         if resultado.matched_count == 0:
             raise HTTPException(status_code=404, detail="Producto no encontrado")
         return {
-            "mensaje": f"Producto '{id_producto}' actualizado a '{disponibilidad_str}'",
+            "mensaje": f"Producto actualizado a '{disponibilidad_str}'",
             "disponible": data.disponible
         }
     except HTTPException:
@@ -527,10 +593,6 @@ async def toggle_disponibilidad_producto(id_producto: str, data: ProductoDisponi
 # ==============================================================================
 @app.patch("/visitas/{visita_id}/llamar-garzon", tags=["Visita"])
 async def llamar_garzon(visita_id: str, datos: LlamarGarzonInput, db=Depends(get_db)):
-    """
-    Actualiza el objeto solicitud_garzon de una visita a activa: true con su respectivo motivo.
-    Acepta tanto el ObjectId de la visita como el número de mesa directamente.
-    """
     try:
         solicitud_payload = {
             "activa": True,
@@ -587,10 +649,6 @@ async def llamar_garzon(visita_id: str, datos: LlamarGarzonInput, db=Depends(get
 
 @app.get("/mesas/{num_mesa}/validar-qr", tags=["Mesa"])
 async def validar_qr(num_mesa: int, token: str, db=Depends(get_db)):
-    """
-    Valida que el token QR de una mesa coincida con el almacenado en la BD.
-    Retorna 403 si el token no coincide o la mesa no existe.
-    """
     try:
         mesa = await db.mesas.find_one(
             {"$or": [{"num_mesa": num_mesa}, {"num_mesa": str(num_mesa)}]}
@@ -618,13 +676,12 @@ async def validar_qr(num_mesa: int, token: str, db=Depends(get_db)):
 # ==============================================================================
 @app.delete("/productos/{id_producto}", tags=["4. DELETE (2)"])
 async def delete_producto(id_producto: str, db=Depends(get_db)):
-    """Elimina un producto por ObjectId o id_plato."""
     try:
         filtro = build_producto_filter(id_producto)
         resultado = await db.producto.delete_one(filtro)
         if resultado.deleted_count == 0:
             raise HTTPException(status_code=404, detail="El producto no existe")
-        return {"mensaje": f"Producto '{id_producto}' eliminado correctamente"}
+        return {"mensaje": f"Producto eliminado correctamente"}
     except HTTPException:
         raise
     except Exception as e:
@@ -633,7 +690,6 @@ async def delete_producto(id_producto: str, db=Depends(get_db)):
 
 @app.delete("/mesas/{num_mesa}", tags=["4. DELETE (2)"])
 async def delete_mesa_condicionada(num_mesa: int, db=Depends(get_db)):
-    """Elimina una mesa solo si su estado es 'Libre'."""
     try:
         resultado = await db.mesas.delete_one({"num_mesa": num_mesa, "estado": "Libre"})
         if resultado.deleted_count == 0:
@@ -646,78 +702,85 @@ async def delete_mesa_condicionada(num_mesa: int, db=Depends(get_db)):
 
 
 # ==============================================================================
-# 5. ALTER / DROP (3) — Equivalentes NoSQL
+# 5. ALTER / DROP (3)
 # ==============================================================================
 @app.post("/admin/alter-1", tags=["5. ALTER y DROP (3)"])
 async def alter_agregar_telefono_empleado(db=Depends(get_db)):
-    """Equivale a ALTER ADD COLUMN telefono."""
     try:
         resultado = await db.empleados.update_many({}, {"$set": {"telefono": None}})
-        return {
-            "mensaje": "Atributo 'telefono' agregado a todos los empleados existentes",
-            "documentos_modificados": resultado.modified_count
-        }
+        return {"mensaje": "Atributo 'telefono' agregado", "modificados": resultado.modified_count}
     except Exception as e:
         raise HTTPException(status_code=500, detail=repr(e))
 
 
 @app.delete("/admin/alter-1/revertir", tags=["5. ALTER y DROP (3)"])
 async def revertir_alter_telefono(db=Depends(get_db)):
-    """Equivale a ALTER DROP COLUMN telefono."""
     try:
         resultado = await db.empleados.update_many({}, {"$unset": {"telefono": ""}})
-        return {
-            "mensaje": "Atributo 'telefono' eliminado de todos los empleados",
-            "documentos_modificados": resultado.modified_count
-        }
+        return {"mensaje": "Atributo 'telefono' eliminado", "modificados": resultado.modified_count}
     except Exception as e:
         raise HTTPException(status_code=500, detail=repr(e))
 
 
 @app.post("/admin/alter-2", tags=["5. ALTER y DROP (3)"])
 async def alter_agregar_fecha_entrega_pedido(db=Depends(get_db)):
-    """Equivale a ALTER ADD COLUMN fecha_entrega."""
     try:
         resultado = await db.pedidos.update_many({}, {"$set": {"fecha_entrega": None}})
-        return {
-            "mensaje": "Atributo 'fecha_entrega' agregado a todos los pedidos existentes",
-            "documentos_modificados": resultado.modified_count
-        }
+        return {"mensaje": "Atributo 'fecha_entrega' agregado", "modificados": resultado.modified_count}
     except Exception as e:
         raise HTTPException(status_code=500, detail=repr(e))
 
 
 @app.delete("/admin/alter-2/revertir", tags=["5. ALTER y DROP (3)"])
 async def revertir_alter_fecha_entrega(db=Depends(get_db)):
-    """Equivale a ALTER DROP COLUMN fecha_entrega."""
     try:
         resultado = await db.pedidos.update_many({}, {"$unset": {"fecha_entrega": ""}})
-        return {
-            "mensaje": "Atributo 'fecha_entrega' eliminado de todos los pedidos",
-            "documentos_modificados": resultado.modified_count
-        }
+        return {"mensaje": "Atributo 'fecha_entrega' eliminado", "modificados": resultado.modified_count}
     except Exception as e:
         raise HTTPException(status_code=500, detail=repr(e))
 
 
 @app.post("/admin/preparar-temporada", tags=["5. ALTER y DROP (3)"])
 async def preparar_coleccion_promociones(db=Depends(get_db)):
-    """Crea la colección promocion_temporada con un documento semilla."""
     try:
         count = await db.promocion_temporada.count_documents({})
         if count > 0:
-            return {"mensaje": "La colección 'promocion_temporada' ya existe."}
+            return {"mensaje": "La colección ya existe."}
         await db.promocion_temporada.insert_one({"nombre_promo": "SEMILLA", "descuento": 0.0})
-        return {"mensaje": "Colección 'promocion_temporada' creada. Lista para demostrar el DROP."}
+        return {"mensaje": "Colección 'promocion_temporada' creada."}
     except Exception as e:
         raise HTTPException(status_code=500, detail=repr(e))
 
 
 @app.delete("/admin/drop/promociones", tags=["5. ALTER y DROP (3)"])
 async def drop_coleccion_promociones(db=Depends(get_db)):
-    """Equivale a DROP TABLE promocion_temporada."""
     try:
         await db.promocion_temporada.drop()
         return {"mensaje": "Coleccion 'promocion_temporada' eliminada con exito (DROP)"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=repr(e))
+
+
+# ==============================================================================
+# ARCHIVOS ESTÁTICOS / FRONTEND SPA (Producción en Railway / Docker)
+# ==============================================================================
+frontend_dist = os.environ.get("STATIC_FRONTEND_PATH", os.path.join(os.path.dirname(__file__), "frontend-dist"))
+if not os.path.exists(frontend_dist):
+    frontend_dist = os.path.join(os.path.dirname(__file__), "..", "frontend", "dist")
+
+if os.path.exists(frontend_dist):
+    assets_dir = os.path.join(frontend_dist, "assets")
+    if os.path.exists(assets_dir):
+        app.mount("/assets", StaticFiles(directory=assets_dir), name="assets")
+
+    from fastapi.responses import FileResponse
+
+    @app.get("/{full_path:path}", include_in_schema=False)
+    async def serve_spa(full_path: str):
+        file_path = os.path.join(frontend_dist, full_path)
+        if full_path and os.path.exists(file_path) and os.path.isfile(file_path):
+            return FileResponse(file_path)
+        index_file = os.path.join(frontend_dist, "index.html")
+        if os.path.exists(index_file):
+            return FileResponse(index_file)
+        raise HTTPException(status_code=404, detail="Archivo frontend no encontrado")
