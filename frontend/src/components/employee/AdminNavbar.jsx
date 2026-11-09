@@ -49,7 +49,7 @@ export default function AdminNavbar() {
         <div className="staff-user-pill">
           <User size={15} color="#94A3B8" />
           <span style={{ fontWeight: 600 }}>{user?.displayName || 'Admin'}</span>
-          <span className="staff-user-role" style={{ backgroundColor: '#FEE2E2', color: '#991B1B' }}>
+          <span className="staff-user-role" style={{ backgroundColor: '#F1F5F9', color: '#475569' }}>
             Administrador
           </span>
         </div>
@@ -66,4 +66,3 @@ export default function AdminNavbar() {
     </header>
   );
 }
-

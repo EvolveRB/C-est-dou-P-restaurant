@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Search, X, Wifi, BatteryMedium, Signal } from 'lucide-react';
+import { Search, X } from 'lucide-react';
 import { useCart } from '../../context/CartContext';
 
 export default function ClientHeader({ searchQuery, setSearchQuery }) {
@@ -8,26 +8,13 @@ export default function ClientHeader({ searchQuery, setSearchQuery }) {
 
   return (
     <header className="client-header">
-      {/* Mobile simulated status bar (12:30, signal, wifi, battery) */}
-      <div className="mobile-status-bar">
-        <span>12:30</span>
-        <div className="status-bar-icons">
-          <Signal size={13} strokeWidth={2.5} />
-          <Wifi size={13} strokeWidth={2.5} />
-          <BatteryMedium size={16} strokeWidth={2.5} />
-        </div>
-      </div>
-
-      {/* Main Bar: Restaurant Name + Search Icon */}
+      {/* Barra Principal: Nombre del Restaurante + Indicador de Mesa + Buscador */}
       <div className="client-header-top">
         <div>
           <h1 className="client-brand-title">C'est doux P</h1>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '2px' }}>
             <span className="table-pill-indicator">
               Mesa {tableNumber}
-            </span>
-            <span style={{ fontSize: '11px', color: 'var(--c-text-muted)' }}>
-              Menú Digital
             </span>
           </div>
         </div>
@@ -42,7 +29,7 @@ export default function ClientHeader({ searchQuery, setSearchQuery }) {
         </button>
       </div>
 
-      {/* Expandable search bar */}
+      {/* Barra de búsqueda expandible */}
       {showSearch && (
         <div className="client-search-bar">
           <Search size={16} color="var(--c-terracotta)" />
@@ -58,7 +45,7 @@ export default function ClientHeader({ searchQuery, setSearchQuery }) {
               onClick={() => setSearchQuery('')}
               style={{ color: 'var(--c-text-muted)', display: 'flex' }}
             >
-              <X size={15} />
+              <X size={16} />
             </button>
           )}
         </div>
