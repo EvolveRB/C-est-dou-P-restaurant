@@ -36,7 +36,7 @@ export default function ClientLayout() {
         });
       }
     }
-  }, [numeroMesa, searchParams, updateTable, validarQrMesa]);
+  }, [numeroMesa, searchParams, updateTable, validarQrMesa, showToast]);
 
   return (
     <div className="client-app-wrapper">

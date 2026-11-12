@@ -1,22 +1,28 @@
 import { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { useLocation } from 'react-router-dom';
 import { useRestaurant } from './RestaurantContext';
+import { roleLog } from '../utils/roleLogger';
 
 const CartContext = createContext(null);
 
 export function CartProvider({ children }) {
-  const { tables, submitOrderForTable, resetTable, llamarGarzon, reiniciarEstadoPruebas } = useRestaurant();
+  const location = useLocation();
+  const isClientRoute = /^\/(mesa|menu|cliente)(\/|$)/.test(location.pathname);
 
-  // ──────────────────────────────────────────────────────────────────────────
-  // Estado: número de mesa activa (leído del QR)
-  // ──────────────────────────────────────────────────────────────────────────
+  const { tables, submitOrderForTable, resetTable, llamarGarzon } = useRestaurant();
+
+  // Solo el navegador del comensal (cliente) usa localStorage para conservar su pedido
   const [tableNumber, setTableNumber] = useState(() => {
-    return localStorage.getItem('cest_doux_mesa_activa') || '1';
+    if (!isClientRoute) return '1';
+    try {
+      return localStorage.getItem('cest_doux_mesa_activa') || '1';
+    } catch {
+      return '1';
+    }
   });
 
-  // ──────────────────────────────────────────────────────────────────────────
-  // Estado: items del carrito
-  // ──────────────────────────────────────────────────────────────────────────
   const [cart, setCart] = useState(() => {
+    if (!isClientRoute) return [];
     try {
       const saved = localStorage.getItem('carrito_cest_dou_p');
       return saved ? JSON.parse(saved) : [];
@@ -25,20 +31,27 @@ export function CartProvider({ children }) {
     }
   });
 
-  // Estado del toast de notificación
   const [toastMessage, setToastMessage] = useState(null);
   const [sendingOrder, setSendingOrder] = useState(false);
   const [lastSubmittedOrder, setLastSubmittedOrder] = useState(null);
   const [callingWaiter, setCallingWaiter] = useState(false);
 
+  // Persistir carrito SOLO en rutas de cliente para no perder su progreso si recarga o sale
   useEffect(() => {
-    localStorage.setItem('carrito_cest_dou_p', JSON.stringify(cart));
-    if (tableNumber) {
-      localStorage.setItem(`carrito_cest_dou_p_mesa_${tableNumber}`, JSON.stringify(cart));
+    if (!isClientRoute) return;
+    try {
+      localStorage.setItem('carrito_cest_dou_p', JSON.stringify(cart));
+      if (tableNumber) {
+        localStorage.setItem(`carrito_cest_dou_p_mesa_${tableNumber}`, JSON.stringify(cart));
+      }
+    } catch {
+      // Ignorar errores de almacenamiento
     }
-  }, [cart, tableNumber]);
+  }, [cart, tableNumber, isClientRoute]);
 
   useEffect(() => {
+    if (!isClientRoute) return;
+
     const syncFromStorage = () => {
       try {
         const saved = localStorage.getItem('carrito_cest_dou_p');
@@ -48,7 +61,9 @@ export function CartProvider({ children }) {
             setCart(parsed);
           }
         }
-      } catch {}
+      } catch {
+        // Ignorar errores de parseo en localStorage
+      }
     };
 
     const handleStorageChange = (e) => {
@@ -56,7 +71,9 @@ export function CartProvider({ children }) {
         try {
           const parsed = JSON.parse(e.newValue);
           if (Array.isArray(parsed)) setCart(parsed);
-        } catch {}
+        } catch {
+          // Ignorar errores de parseo en evento storage
+        }
       }
     };
 
@@ -73,22 +90,21 @@ export function CartProvider({ children }) {
       window.removeEventListener('storage', handleStorageChange);
       document.removeEventListener('visibilitychange', handleVisibility);
     };
-  }, []);
+  }, [isClientRoute]);
 
-  const showToast = (msg) => {
+  const showToast = useCallback((msg) => {
     setToastMessage(msg);
     setTimeout(() => {
       setToastMessage((curr) => (curr === msg ? null : curr));
     }, 2800);
-  };
+  }, []);
 
   const updateTable = useCallback((num) => {
     if (!num) return;
     const strNum = String(num);
     setTableNumber(strNum);
-    localStorage.setItem('cest_doux_mesa_activa', strNum);
-
     try {
+      localStorage.setItem('cest_doux_mesa_activa', strNum);
       const tableCart = localStorage.getItem(`carrito_cest_dou_p_mesa_${strNum}`);
       const generalCart = localStorage.getItem('carrito_cest_dou_p');
       const cartToRestore = tableCart || generalCart;
@@ -98,16 +114,14 @@ export function CartProvider({ children }) {
           setCart(parsed);
         }
       }
-    } catch {}
+    } catch {
+      // Ignorar errores de lectura en localStorage
+    }
   }, []);
 
-  // ──────────────────────────────────────────────────────────────────────────
-  // Operaciones del carrito con validación de "Producto agotado"
-  // ──────────────────────────────────────────────────────────────────────────
   const addToCart = (product, qty = 1, note = '') => {
     if (!product) return false;
 
-    // Validación UX: Producto agotado
     if (product.disponible === false) {
       showToast('⚠️ Producto agotado: Este plato no se encuentra disponible.');
       return false;
@@ -123,7 +137,7 @@ export function CartProvider({ children }) {
         next[index] = {
           ...next[index],
           quantity: next[index].quantity + parsedQty,
-          note: note || next[index].note
+          note: note || next[index].note,
         };
         return next;
       }
@@ -162,7 +176,9 @@ export function CartProvider({ children }) {
       try {
         localStorage.removeItem(`carrito_cest_dou_p_mesa_${tableNumber}`);
         localStorage.removeItem('carrito_cest_dou_p');
-      } catch {}
+      } catch {
+        // Ignorar errores de almacenamiento
+      }
       if (resetTable) {
         await resetTable(tableNumber);
       }
@@ -170,9 +186,6 @@ export function CartProvider({ children }) {
     showToast(`Mesa ${tableNumber} liberada y limpia`);
   };
 
-  // ──────────────────────────────────────────────────────────────────────────
-  // sendOrder con validación de "Carrito vacío"
-  // ──────────────────────────────────────────────────────────────────────────
   const sendOrder = async (customNotes = '') => {
     if (cart.length === 0) {
       showToast('⚠️ Carrito vacío: Agrega platos antes de enviar el pedido.');
@@ -184,19 +197,19 @@ export function CartProvider({ children }) {
     try {
       const newOrder = await submitOrderForTable(tableNumber, cart, customNotes);
       setLastSubmittedOrder(newOrder);
-      // Limpiar el carrito local para que los nuevos platos agregados
-      // aparezcan en una nueva sección editable más abajo
       clearCart();
       try {
         localStorage.removeItem('carrito_cest_dou_p');
         if (tableNumber) {
           localStorage.removeItem(`carrito_cest_dou_p_mesa_${tableNumber}`);
         }
-      } catch {}
+      } catch {
+        // Ignorar errores de almacenamiento
+      }
       showToast('✅ Pedido enviado a cocina con éxito');
       return newOrder;
     } catch (err) {
-      console.error('[CartContext] sendOrder falló:', err);
+      roleLog('Cliente', 'error', `Error enviando pedido: ${err.message}`);
       showToast('❌ Error al enviar el pedido. Intenta de nuevo.');
       return null;
     } finally {
@@ -204,23 +217,16 @@ export function CartProvider({ children }) {
     }
   };
 
-  // ──────────────────────────────────────────────────────────────────────────
-  // llamarGarzonCliente — RF-08: Llamar al Garzón desde la vista del cliente
-  // ──────────────────────────────────────────────────────────────────────────
   const solicitarGarzon = async (motivo = 'Atención solicitada en mesa') => {
     if (callingWaiter) return;
     setCallingWaiter(true);
     try {
-      // Buscar visita activa de la mesa actual si existe
-      const currentTable = tables.find((t) => String(t.id) === String(tableNumber));
-      const targetId = currentTable?.visita_activa_id || tableNumber;
-
       if (llamarGarzon) {
         await llamarGarzon(tableNumber, motivo);
       }
       showToast(`🔔 Garzón llamado: Un mesero se acerca a la Mesa ${tableNumber}.`);
     } catch (err) {
-      console.warn('[CartContext] Error llamando garzón:', err);
+      roleLog('Cliente', 'warn', `Error llamando garzón: ${err.message}`);
       showToast(`🔔 Solicitud enviada al personal de sala (Mesa ${tableNumber}).`);
     } finally {
       setCallingWaiter(false);
@@ -228,19 +234,20 @@ export function CartProvider({ children }) {
   };
 
   const currentTableState = tables.find((t) => String(t.id) === String(tableNumber));
-  const activeOrder = (currentTableState && currentTableState.pedido && currentTableState.estado !== 'Libre')
-    ? {
-        ...currentTableState.pedido,
-        mesa: tableNumber,
-        estado: currentTableState.estado
-      }
-    : (lastSubmittedOrder && String(lastSubmittedOrder.num_mesa) === String(tableNumber))
+  const activeOrder =
+    currentTableState && currentTableState.pedido && currentTableState.estado !== 'Libre'
       ? {
-          ...lastSubmittedOrder,
+          ...currentTableState.pedido,
           mesa: tableNumber,
-          estado: 'Esperando'
+          estado: currentTableState.estado,
         }
-      : null;
+      : !currentTableState && lastSubmittedOrder && String(lastSubmittedOrder.num_mesa) === String(tableNumber)
+        ? {
+            ...lastSubmittedOrder,
+            mesa: tableNumber,
+            estado: 'Esperando',
+          }
+        : null;
 
   const totalItems = cart.reduce((sum, item) => sum + (item.quantity || 1), 0);
   const totalPrice = cart.reduce(
@@ -259,7 +266,6 @@ export function CartProvider({ children }) {
         removeFromCart,
         clearCart,
         resetActiveTable,
-        reiniciarEstadoPruebas,
         sendOrder,
         solicitarGarzon,
         callingWaiter,
@@ -268,7 +274,7 @@ export function CartProvider({ children }) {
         totalPrice,
         toastMessage,
         showToast,
-        sendingOrder
+        sendingOrder,
       }}
     >
       {children}

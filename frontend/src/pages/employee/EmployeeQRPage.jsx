@@ -1,4 +1,3 @@
-import { useState, useEffect } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import { Printer, ExternalLink, ArrowLeft, Plus, Minus } from 'lucide-react';
 import { Link } from 'react-router-dom';
@@ -6,12 +5,7 @@ import { useRestaurant } from '../../context/RestaurantContext';
 
 export default function EmployeeQRPage() {
   const { tables, setTableCount } = useRestaurant();
-  const [inputValue, setInputValue] = useState(tables.length);
   const baseUrl = window.location.origin;
-
-  useEffect(() => {
-    setInputValue(tables.length);
-  }, [tables.length]);
 
   const handlePrint = () => {
     window.print();
@@ -26,27 +20,6 @@ export default function EmployeeQRPage() {
   const handleDecrement = () => {
     if (tables.length > 1) {
       setTableCount(tables.length - 1);
-    }
-  };
-
-  const handleInputChange = (e) => {
-    setInputValue(e.target.value);
-    const parsed = parseInt(e.target.value, 10);
-    if (!isNaN(parsed) && parsed >= 1 && parsed <= 50) {
-      setTableCount(parsed);
-    }
-  };
-
-  const handleInputBlur = () => {
-    const parsed = parseInt(inputValue, 10);
-    if (isNaN(parsed) || parsed < 1) {
-      setTableCount(1);
-      setInputValue(1);
-    } else if (parsed > 50) {
-      setTableCount(50);
-      setInputValue(50);
-    } else {
-      setTableCount(parsed);
     }
   };
 

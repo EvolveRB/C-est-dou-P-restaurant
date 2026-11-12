@@ -5,3 +5,4 @@ motor
 pymongo
 pydantic
 aiofiles
+sqlalchemy

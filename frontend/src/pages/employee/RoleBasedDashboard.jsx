@@ -1,19 +1,22 @@
+import { lazy, Suspense } from 'react';
 import { useAuth } from '../../context/AuthContext';
-import AdminDashboardPage from './AdminDashboardPage';
-import GarzonTablesPage from './GarzonTablesPage';
-import EmployeeDashboardPage from './EmployeeDashboardPage';
+
+const AdminDashboardPage = lazy(() => import('./AdminDashboardPage'));
+const GarzonTablesPage = lazy(() => import('./GarzonTablesPage'));
+const EmployeeDashboardPage = lazy(() => import('./EmployeeDashboardPage'));
 
 export default function RoleBasedDashboard() {
   const { user } = useAuth();
 
-  if (user?.role === 'Administrador') {
-    return <AdminDashboardPage />;
-  }
-
-  if (user?.role === 'Garzón' || user?.role === 'Mesero') {
-    return <GarzonTablesPage />;
-  }
-
-  return <EmployeeDashboardPage />;
+  return (
+    <Suspense fallback={<div style={{ padding: '40px', textAlign: 'center', color: '#64748B' }}>Cargando vista del perfil...</div>}>
+      {user?.role === 'Administrador' ? (
+        <AdminDashboardPage />
+      ) : user?.role === 'Garzón' || user?.role === 'Mesero' ? (
+        <GarzonTablesPage />
+      ) : (
+        <EmployeeDashboardPage />
+      )}
+    </Suspense>
+  );
 }
-

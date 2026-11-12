@@ -10,8 +10,7 @@ import {
   CheckCircle2,
   X,
   Banknote,
-  Smartphone,
-  Receipt
+  Smartphone
 } from 'lucide-react';
 import { useCart } from '../../context/CartContext';
 import { formatPrice } from '../../data/initialProducts';

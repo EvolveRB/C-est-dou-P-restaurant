@@ -1,0 +1,22 @@
+# Node / frontend
+frontend/node_modules
+frontend/.pnpm-store
+frontend/dist
+frontend/.cache
+
+# Python / backend
+backend/__pycache__
+backend/*.pyc
+backend/*.pyo
+backend/venv
+backend/.venv
+
+# Git y entorno local
+.git
+.gitignore
+.vscode
+.idea
+*.log
+backend/.env
+frontend/.env
+

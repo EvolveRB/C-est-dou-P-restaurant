@@ -1,11 +1,14 @@
-import { X, Clock, ChefHat, CheckCircle2, AlertCircle, Utensils } from 'lucide-react';
+import { X, Clock, ChefHat, Utensils } from 'lucide-react';
 import { formatPrice } from '../../data/initialProducts';
+import { useAuth } from '../../context/AuthContext';
 
 export default function CookOrderModal({ table, mesa, onClose, onUpdateStatus }) {
+  const { user } = useAuth();
   const activeTable = table || mesa;
   if (!activeTable || !activeTable.pedido) return null;
 
   const { id, estado, pedido } = activeTable;
+  const isCook = user?.role === 'Cocina' || user?.role === 'Cocinero';
 
   const handleNextStatus = () => {
     if (!onUpdateStatus) return;
@@ -13,16 +16,7 @@ export default function CookOrderModal({ table, mesa, onClose, onUpdateStatus })
       onUpdateStatus(id, 'En preparación');
     } else if (estado === 'En preparación') {
       onUpdateStatus(id, 'Listo para servir');
-    } else if (estado === 'Listo para servir' || estado === 'Enviado a mesa') {
-      onUpdateStatus(id, 'Libre');
-      onClose();
     }
-  };
-
-  const handleFreeTable = () => {
-    if (!onUpdateStatus) return;
-    onUpdateStatus(id, 'Libre');
-    onClose();
   };
 
   return (
@@ -292,50 +286,33 @@ export default function CookOrderModal({ table, mesa, onClose, onUpdateStatus })
 
           {(estado === 'Listo para servir' || estado === 'Enviado a mesa') && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              <div style={{
-                background: '#DCFCE7',
-                color: '#15803D',
-                padding: '10px',
-                borderRadius: '10px',
-                textAlign: 'center',
-                fontWeight: 700,
-                fontSize: '13.5px'
-              }}>
-                🍽️ Pedido listo para llevar a la mesa
-              </div>
+              {!isCook && (
+                <div style={{
+                  background: '#DCFCE7',
+                  color: '#15803D',
+                  padding: '10px',
+                  borderRadius: '10px',
+                  textAlign: 'center',
+                  fontWeight: 700,
+                  fontSize: '13.5px'
+                }}>
+                  🍽️ Pedido listo para llevar a la mesa
+                </div>
+              )}
               <button
-                onClick={handleFreeTable}
-                className="btn-primary"
+                onClick={onClose}
+                className="btn-secondary"
                 style={{
                   width: '100%',
                   borderRadius: '12px',
                   padding: '12px',
-                  fontSize: '14px'
+                  fontSize: '14px',
+                  fontWeight: 700
                 }}
               >
-                Completar y liberar mesa
+                Cerrar
               </button>
             </div>
-          )}
-
-          {/* Botón secundario para liberar la mesa */}
-          {estado !== 'Listo para servir' && estado !== 'Enviado a mesa' && (
-            <button
-              onClick={handleFreeTable}
-              style={{
-                marginTop: '10px',
-                width: '100%',
-                background: 'transparent',
-                color: '#6B7280',
-                border: 'none',
-                fontSize: '12.5px',
-                fontWeight: 600,
-                cursor: 'pointer',
-                textDecoration: 'underline'
-              }}
-            >
-              Liberar mesa y cancelar pedido
-            </button>
           )}
         </div>
       </div>

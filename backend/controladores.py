@@ -2,10 +2,22 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from typing import Optional, List
 from database import get_db # Tu conexión a Motor
+from bson.objectid import ObjectId
 
 router = APIRouter()
 
-# Modelos Pydantic base para recibir datos (simplificados)
+# ==========================================
+# FUNCIÓN AYUDANTE PARA FORMATEAR MONGO
+# ==========================================
+def parse_mongo(doc):
+    """Convierte el ObjectId a string para evitar errores de FastAPI"""
+    if doc and "_id" in doc:
+        doc["_id"] = str(doc["_id"])
+    return doc
+
+# ==========================================
+# MODELOS PYDANTIC
+# ==========================================
 class MesaCreate(BaseModel):
     num_mesa: int
     estado: str = "Libre"
@@ -30,7 +42,7 @@ class PedidoCreate(BaseModel):
     num_mesa: int
     empleado_id: str
     estado_pedido: str = "Pendiente"
-    items: List[ItemPedido] # Embebiendo los detalles del pedido[cite: 30]
+    items: List[ItemPedido]
 
 # ==========================================
 # 1. CONSULTAS INSERT (3)
@@ -47,7 +59,6 @@ async def crear_producto(producto: ProductoCreate, db = Depends(get_db)):
 
 @router.post("/pedidos", tags=["1. INSERT (3)"])
 async def crear_pedido(pedido: PedidoCreate, db = Depends(get_db)):
-    # Calcula subtotal automáticamente
     subtotal = sum(item.precio_unitario * item.cantidad for item in pedido.items)
     pedido_dict = pedido.model_dump()
     pedido_dict["subtotal"] = subtotal
@@ -65,19 +76,17 @@ async def select_simple_productos_baratos(precio_maximo: float = 10000, db = Dep
 
 @router.get("/pedidos/info-mesas", tags=["2. SELECT (3)"])
 async def select_pedidos_mesas(db = Depends(get_db)):
-    """Reemplaza al JOIN de 3 tablas. En Mongo, la mesa ya está en el pedido[cite: 32]"""
+    """Reemplaza al JOIN de 3 tablas. En Mongo, la mesa ya está en el pedido"""
     cursor = db.pedidos.find({}, {"_id": 1, "num_mesa": 1, "estado_pedido": 1, "hora_pedido": 1})
     pedidos = await cursor.to_list(length=100)
-    for p in pedidos: p["_id"] = str(p["_id"])
-    return pedidos
+    return [parse_mongo(p) for p in pedidos]
 
 @router.get("/pedidos/detalles-platos", tags=["2. SELECT (3)"])
 async def select_detalles_platos(db = Depends(get_db)):
-    """Reemplaza al JOIN de 2 tablas. Los detalles ya vienen embebidos en 'items'[cite: 32]"""
+    """Reemplaza al JOIN de 2 tablas. Los detalles ya vienen embebidos en 'items'"""
     cursor = db.pedidos.find({}, {"_id": 1, "items": 1})
     pedidos = await cursor.to_list(length=100)
-    for p in pedidos: p["_id"] = str(p["_id"])
-    return pedidos
+    return [parse_mongo(p) for p in pedidos]
 
 # ==========================================
 # 3. CONSULTAS UPDATE (2)
@@ -91,7 +100,6 @@ async def update_estado_mesa(num_mesa: int, estado: str, db = Depends(get_db)):
 
 @router.put("/productos/{id_producto}/precio", tags=["3. UPDATE (2)"])
 async def update_precio_producto(id_producto: str, precio: float, db = Depends(get_db)):
-    from bson.objectid import ObjectId
     resultado = await db.producto.update_one({"_id": ObjectId(id_producto)}, {"$set": {"precio": precio}})
     if resultado.modified_count == 0:
         raise HTTPException(status_code=404, detail="Producto no encontrado")
@@ -102,7 +110,6 @@ async def update_precio_producto(id_producto: str, precio: float, db = Depends(g
 # ==========================================
 @router.delete("/productos/{id_producto}", tags=["4. DELETE (2)"])
 async def delete_producto(id_producto: str, db = Depends(get_db)):
-    from bson.objectid import ObjectId
     resultado = await db.producto.delete_one({"_id": ObjectId(id_producto)})
     if resultado.deleted_count == 0:
         raise HTTPException(status_code=404, detail="El producto no existe")

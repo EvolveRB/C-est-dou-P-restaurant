@@ -1,11 +1,21 @@
+import { lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { AuthProvider } from './context/AuthContext';
+import { AuthProvider, useAuth } from './context/AuthContext';
 import { RestaurantProvider } from './context/RestaurantContext';
 import { CartProvider } from './context/CartContext';
-import EmployeeLayout from './layouts/EmployeeLayout';
-import ClientLayout from './layouts/ClientLayout';
-import RoleBasedDashboard from './pages/employee/RoleBasedDashboard';
-import EmployeeQRPage from './pages/employee/EmployeeQRPage';
+
+const EmployeeLayout = lazy(() => import('./layouts/EmployeeLayout'));
+const ClientLayout = lazy(() => import('./layouts/ClientLayout'));
+const RoleBasedDashboard = lazy(() => import('./pages/employee/RoleBasedDashboard'));
+const EmployeeQRPage = lazy(() => import('./pages/employee/EmployeeQRPage'));
+
+function AdminOnlyRoute({ children }) {
+  const { user } = useAuth();
+  if (user?.role !== 'Administrador') {
+    return <Navigate to="/" replace />;
+  }
+  return children;
+}
 
 export default function App() {
   return (
@@ -13,30 +23,35 @@ export default function App() {
       <AuthProvider>
         <RestaurantProvider>
           <CartProvider>
-            <Routes>
-              {/* ========================================================
-                  1. VISTA DE LOS CLIENTES (Exclusiva por Código QR)
-                  Diseñada especialmente para teléfonos móviles.
-                  Llega directamente al catálogo de la mesa correspondiente.
-                 ======================================================== */}
-              <Route path="/mesa/:numeroMesa" element={<ClientLayout />} />
-              <Route path="/menu" element={<Navigate to="/mesa/1" replace />} />
-              <Route path="/cliente" element={<Navigate to="/mesa/1" replace />} />
+            <Suspense fallback={<div style={{ padding: '40px', textAlign: 'center', color: '#64748B' }}>Cargando...</div>}>
+              <Routes>
+                <Route path="/mesa/:numeroMesa" element={<ClientLayout />} />
+                <Route path="/menu" element={<Navigate to="/mesa/1" replace />} />
+                <Route path="/cliente" element={<Navigate to="/mesa/1" replace />} />
 
-              {/* ========================================================
-                  2. VISTA PRINCIPAL: EMPLEADOS Y PERSONAL
-                  Ajustada por rol: Administrador (vacía), Garzón (solo mesas)
-                  y Cocina (pedidos e inventario).
-                 ======================================================== */}
-              <Route path="/" element={<EmployeeLayout />}>
-                <Route index element={<RoleBasedDashboard />} />
-                <Route path="staff/qrs" element={<EmployeeQRPage />} />
-                <Route path="admin/qrs" element={<EmployeeQRPage />} />
-              </Route>
+                <Route path="/" element={<EmployeeLayout />}>
+                  <Route index element={<RoleBasedDashboard />} />
+                  <Route
+                    path="staff/qrs"
+                    element={
+                      <AdminOnlyRoute>
+                        <EmployeeQRPage />
+                      </AdminOnlyRoute>
+                    }
+                  />
+                  <Route
+                    path="admin/qrs"
+                    element={
+                      <AdminOnlyRoute>
+                        <EmployeeQRPage />
+                      </AdminOnlyRoute>
+                    }
+                  />
+                </Route>
 
-              {/* Redirección por defecto al portal de empleados */}
-              <Route path="*" element={<Navigate to="/" replace />} />
-            </Routes>
+                <Route path="*" element={<Navigate to="/" replace />} />
+              </Routes>
+            </Suspense>
           </CartProvider>
         </RestaurantProvider>
       </AuthProvider>

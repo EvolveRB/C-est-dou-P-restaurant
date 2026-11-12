@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { formatPrice } from '../../data/initialProducts';
 import { Plus, Ban, UtensilsCrossed } from 'lucide-react';
 import { useCart } from '../../context/CartContext';
@@ -14,13 +14,15 @@ function formatDishUrl(src) {
 
 export default function ProductCard({ product, onOpenDetail, onSelectTag }) {
   const { addToCart } = useCart();
+  const [prevImagen, setPrevImagen] = useState(product.imagen);
   const [imgError, setImgError] = useState(false);
   const [currentSrc, setCurrentSrc] = useState(() => formatDishUrl(product.imagen));
 
-  useEffect(() => {
+  if (prevImagen !== product.imagen) {
+    setPrevImagen(product.imagen);
     setCurrentSrc(formatDishUrl(product.imagen));
     setImgError(false);
-  }, [product.imagen]);
+  }
 
   const handleImgError = () => {
     if (currentSrc && !currentSrc.startsWith('/Imagenes/')) {

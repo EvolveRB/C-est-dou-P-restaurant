@@ -1,6 +1,6 @@
 import { NavLink, Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
-import { Utensils, QrCode, LogOut, User, ChefHat } from 'lucide-react';
+import { Utensils, LogOut, User, ChefHat } from 'lucide-react';
 
 export default function StaffNavbar() {
   const { user, logout } = useAuth();

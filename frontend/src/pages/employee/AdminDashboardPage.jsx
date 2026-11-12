@@ -1,75 +1,97 @@
 import { useState } from 'react';
 import { useRestaurant } from '../../context/RestaurantContext';
+import { formatRutDisplay, isValidRutFormat } from '../../utils/rut';
+import RoleLogsPanel from '../../components/employee/RoleLogsPanel';
 import {
   Users,
   UserPlus,
   ShieldCheck,
   ChefHat,
   Utensils,
-  Plus,
-  Minus,
   Trash2,
   X,
   Phone,
   Mail,
-  UserCheck,
   Layers,
-  Sparkles
+  KeyRound,
+  Copy,
+  Check
 } from 'lucide-react';
 
 export default function AdminDashboardPage() {
   const {
     tables,
-    setTableCount,
     employees,
     addEmployee,
+    resetEmployeePassword,
     updateEmployeeRole,
     deleteEmployee
   } = useRestaurant();
 
   // Estados de formulario para nuevo trabajador
   const [showAddModal, setShowAddModal] = useState(false);
+  const [newRut, setNewRut] = useState('');
   const [newNombre, setNewNombre] = useState('');
   const [newApellido, setNewApellido] = useState('');
   const [newCorreo, setNewCorreo] = useState('');
   const [newTelefono, setNewTelefono] = useState('');
   const [newRol, setNewRol] = useState('Garzón');
   const [formError, setFormError] = useState('');
+  const [actionError, setActionError] = useState('');
+  const [tempCredentials, setTempCredentials] = useState(null);
+  const [copiedPass, setCopiedPass] = useState(false);
   const [activeTab, setActiveTab] = useState('todos'); // 'todos', 'Cocinero', 'Garzón', 'Administrador'
 
-  const totalOcupadas = tables.filter((t) => t.estado !== 'Libre').length;
-  const totalLibres = tables.filter((t) => t.estado === 'Libre').length;
-
-  const handleIncrement = () => {
-    if (tables.length < 50) {
-      setTableCount(tables.length + 1);
-    }
-  };
-
-  const handleDecrement = () => {
-    if (tables.length > 1) {
-      setTableCount(tables.length - 1);
-    }
-  };
-
   const handleRoleChange = async (empId, newRole) => {
-    await updateEmployeeRole(empId, newRole);
+    setActionError('');
+    const res = await updateEmployeeRole(empId, newRole);
+    if (res && !res.success) {
+      setActionError(res.error || 'No se pudo actualizar el rol.');
+    }
   };
 
   const handleDelete = async (empId, name) => {
     if (window.confirm(`¿Estás seguro de eliminar a ${name} de la plantilla?`)) {
-      await deleteEmployee(empId);
+      setActionError('');
+      const res = await deleteEmployee(empId);
+      if (res && !res.success) {
+        setActionError(res.error || 'No se pudo eliminar al trabajador.');
+      }
     }
+  };
+
+  const handleResetPassword = async (emp) => {
+    const empId = emp._id || emp.id;
+    const nombre = `${emp.nombre || ''} ${emp.apellido || ''}`.trim();
+    if (!window.confirm(`¿Generar una nueva contraseña temporal para ${nombre}?`)) return;
+    setActionError('');
+    const res = await resetEmployeePassword(empId);
+    if (!res?.success) {
+      setActionError(res?.error || 'No se pudo generar la contraseña temporal.');
+      return;
+    }
+    setCopiedPass(false);
+    setTempCredentials({
+      nombre,
+      rut: res.empleado?.rut || emp.rut,
+      password: res.temporaryPassword,
+      rol: res.empleado?.rol || emp.rol,
+    });
   };
 
   const handleSaveEmployee = async (e) => {
     e.preventDefault();
+    if (!isValidRutFormat(newRut)) {
+      setFormError('Ingresa un RUT válido (ej: 12.345.678-9).');
+      return;
+    }
     if (!newNombre.trim()) {
       setFormError('El nombre del trabajador es obligatorio.');
       return;
     }
     setFormError('');
-    await addEmployee({
+    const res = await addEmployee({
+      rut: newRut,
       nombre: newNombre,
       apellido: newApellido,
       correo: newCorreo,
@@ -77,12 +99,25 @@ export default function AdminDashboardPage() {
       rol: newRol
     });
 
+    if (!res?.success) {
+      setFormError(res?.error || 'No se pudo registrar al trabajador.');
+      return;
+    }
+
+    setNewRut('');
     setNewNombre('');
     setNewApellido('');
     setNewCorreo('');
     setNewTelefono('');
     setNewRol('Garzón');
     setShowAddModal(false);
+    setCopiedPass(false);
+    setTempCredentials({
+      nombre: `${res.empleado?.nombre || ''} ${res.empleado?.apellido || ''}`.trim(),
+      rut: res.empleado?.rut,
+      password: res.temporaryPassword,
+      rol: res.empleado?.rol,
+    });
   };
 
   const filteredEmployees = employees.filter((e) => {
@@ -165,138 +200,7 @@ export default function AdminDashboardPage() {
         </div>
 
         {/* ====================================================================
-            SECCIÓN 1: MODIFICACIÓN DINÁMICA DE MESAS DEL SALÓN
-            El cambio se refleja al instante tanto en Cocineros como en Garzones
-           ==================================================================== */}
-        <div style={{
-          background: '#FFFFFF',
-          borderRadius: '20px',
-          border: '1px solid #EADBCE',
-          padding: '24px',
-          marginBottom: '28px',
-          boxShadow: '0 2px 10px rgba(0, 0, 0, 0.03)'
-        }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px', marginBottom: '16px' }}>
-            <div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <Layers size={20} color="var(--c-terracotta)" />
-                <h2 style={{ fontSize: '18px', fontWeight: 800, color: 'var(--c-burgundy-800)', margin: 0 }}>
-                  Capacidad de Mesas del Salón
-                </h2>
-              </div>
-              <p style={{ fontSize: '13px', color: '#6B7280', margin: '4px 0 0' }}>
-                El número de mesas no es estático: modifícalo aquí y se sincronizará automáticamente para Cocineros y Garzones.
-              </p>
-            </div>
-
-            {/* Controles para aumentar y disminuir mesas */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-              <div style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px',
-                background: '#FAF7F2',
-                padding: '4px 10px',
-                borderRadius: '14px',
-                border: '1px solid #E5D8CC'
-              }}>
-                <button
-                  type="button"
-                  onClick={handleDecrement}
-                  disabled={tables.length <= 1}
-                  title="Disminuir una mesa"
-                  style={{
-                    width: '36px',
-                    height: '36px',
-                    borderRadius: '10px',
-                    border: '1px solid #CBD5E1',
-                    backgroundColor: tables.length <= 1 ? '#F1F5F9' : '#FFFFFF',
-                    color: tables.length <= 1 ? '#94A3B8' : '#1E293B',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    cursor: tables.length <= 1 ? 'not-allowed' : 'pointer',
-                    transition: 'all 0.15s ease'
-                  }}
-                >
-                  <Minus size={16} strokeWidth={2.5} />
-                </button>
-
-                <div style={{
-                  minWidth: '56px',
-                  textAlign: 'center',
-                  fontSize: '18px',
-                  fontWeight: 800,
-                  color: 'var(--c-burgundy-800)'
-                }}>
-                  {tables.length}
-                </div>
-
-                <button
-                  type="button"
-                  onClick={handleIncrement}
-                  disabled={tables.length >= 50}
-                  title="Aumentar una mesa"
-                  style={{
-                    width: '36px',
-                    height: '36px',
-                    borderRadius: '10px',
-                    border: '1px solid #CBD5E1',
-                    backgroundColor: tables.length >= 50 ? '#F1F5F9' : '#FFFFFF',
-                    color: tables.length >= 50 ? '#94A3B8' : '#1E293B',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    cursor: tables.length >= 50 ? 'not-allowed' : 'pointer',
-                    transition: 'all 0.15s ease'
-                  }}
-                >
-                  <Plus size={16} strokeWidth={2.5} />
-                </button>
-              </div>
-
-              {/* Botones de ajuste rápido */}
-              <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}>
-                {[8, 10, 12, 16].map((num) => (
-                  <button
-                    key={num}
-                    type="button"
-                    onClick={() => setTableCount(num)}
-                    style={{
-                      padding: '6px 12px',
-                      borderRadius: '8px',
-                      border: tables.length === num ? '1.5px solid var(--c-burgundy-800)' : '1px solid #E2E8F0',
-                      backgroundColor: tables.length === num ? 'var(--c-burgundy-800)' : '#FFFFFF',
-                      color: tables.length === num ? '#FFFFFF' : '#475569',
-                      fontSize: '12px',
-                      fontWeight: 700,
-                      cursor: 'pointer'
-                    }}
-                  >
-                    {num} mesas
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          {/* Estado actual de ocupación */}
-          <div style={{ display: 'flex', gap: '16px', fontSize: '13px', paddingTop: '12px', borderTop: '1px solid #F3EAE1' }}>
-            <span style={{ color: '#15803D', fontWeight: 600 }}>
-              ● {totalLibres} {totalLibres === 1 ? 'mesa libre' : 'mesas libres'}
-            </span>
-            <span style={{ color: '#B45309', fontWeight: 600 }}>
-              ● {totalOcupadas} {totalOcupadas === 1 ? 'mesa con pedido' : 'mesas con pedido'}
-            </span>
-            <span style={{ color: '#6B7280' }}>
-              (Total configurado en el restaurante: {tables.length} mesas)
-            </span>
-          </div>
-        </div>
-
-        {/* ====================================================================
-            SECCIÓN 2: PLANTILLA DE TRABAJADORES ACTUALES
-            Incluye a Marcela Soto (Cocinero), Ana Morales (Garzón), etc.
+            PLANTILLA DE TRABAJADORES ACTUALES
            ==================================================================== */}
         <div style={{
           background: '#FFFFFF',
@@ -353,6 +257,12 @@ export default function AdminDashboardPage() {
           </div>
 
           {/* Filtros de rol */}
+          {actionError && (
+            <div style={{ backgroundColor: '#FEE2E2', color: '#B91C1C', padding: '10px 14px', borderRadius: '10px', fontSize: '12.5px', fontWeight: 600, marginBottom: '14px' }}>
+              {actionError}
+            </div>
+          )}
+
           <div style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}>
             {[
               { id: 'todos', label: `Todos (${employees.length})` },
@@ -428,33 +338,63 @@ export default function AdminDashboardPage() {
                           <h3 style={{ fontSize: '15px', fontWeight: 800, color: '#1F242E', margin: 0 }}>
                             {nombreCompleto || 'Trabajador'}
                           </h3>
-                          <span style={{ fontSize: '11.5px', color: '#6B7280' }}>
-                            @{emp.username || 'personal'}
+                          <span style={{ fontSize: '11.5px', color: '#6B7280', fontWeight: 600 }}>
+                            RUT: {emp.rut || emp.username || 'Sin RUT'}
                           </span>
+                          {emp.must_change_password && (
+                            <div style={{
+                              marginTop: '4px',
+                              display: 'inline-block',
+                              fontSize: '10.5px',
+                              fontWeight: 700,
+                              color: '#9A3412',
+                              backgroundColor: '#FFEDD5',
+                              padding: '2px 8px',
+                              borderRadius: '9999px',
+                            }}>
+                              Cambio de clave pendiente
+                            </div>
+                          )}
                         </div>
                       </div>
 
-                      <button
-                        onClick={() => handleDelete(empId, nombreCompleto)}
-                        title="Eliminar de la plantilla"
-                        style={{
-                          background: 'none',
-                          border: 'none',
-                          color: '#DC2626',
-                          cursor: 'pointer',
-                          padding: '4px',
-                          borderRadius: '6px'
-                        }}
-                      >
-                        <Trash2 size={16} />
-                      </button>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        <button
+                          onClick={() => handleResetPassword(emp)}
+                          title="Generar nueva contraseña temporal"
+                          style={{
+                            background: 'none',
+                            border: 'none',
+                            color: '#475569',
+                            cursor: 'pointer',
+                            padding: '4px',
+                            borderRadius: '6px'
+                          }}
+                        >
+                          <KeyRound size={15} />
+                        </button>
+                        <button
+                          onClick={() => handleDelete(empId, nombreCompleto)}
+                          title="Eliminar de la plantilla"
+                          style={{
+                            background: 'none',
+                            border: 'none',
+                            color: '#DC2626',
+                            cursor: 'pointer',
+                            padding: '4px',
+                            borderRadius: '6px'
+                          }}
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
                     </div>
 
                     {/* Datos de contacto */}
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '12px', color: '#4B5563', margin: '8px 0 14px' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                         <Mail size={13} color="#9CA3AF" />
-                        <span>{emp.correo || `${emp.username || 'emp'}@restaurant.cl`}</span>
+                        <span>{emp.correo || 'Sin correo registrado'}</span>
                       </div>
                       {emp.telefono && (
                         <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -501,6 +441,8 @@ export default function AdminDashboardPage() {
             })}
           </div>
         </div>
+
+        <RoleLogsPanel roleLabel="Administrador" />
       </div>
 
       {/* ====================================================================
@@ -580,6 +522,20 @@ export default function AdminDashboardPage() {
 
               <div>
                 <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: '#374151', marginBottom: '4px' }}>
+                  RUT: *
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="12.345.678-9"
+                  value={newRut}
+                  onChange={(e) => setNewRut(formatRutDisplay(e.target.value))}
+                  style={{ width: '100%', padding: '9px 12px', borderRadius: '10px', border: '1px solid #CBD5E1', fontSize: '13px', boxSizing: 'border-box' }}
+                />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: '#374151', marginBottom: '4px' }}>
                   Nombre: *
                 </label>
                 <input
@@ -646,6 +602,10 @@ export default function AdminDashboardPage() {
                 />
               </div>
 
+              <div style={{ backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: '10px', padding: '10px 12px', fontSize: '12px', color: '#475569' }}>
+                Se generará automáticamente una <strong>contraseña temporal aleatoria</strong>. El trabajador deberá cambiarla al iniciar sesión por primera vez.
+              </div>
+
               <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
                 <button
                   type="button"
@@ -664,6 +624,101 @@ export default function AdminDashboardPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* ====================================================================
+          MODAL: CONTRASEÑA TEMPORAL GENERADA (Se muestra una única vez)
+         ==================================================================== */}
+      {tempCredentials && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            backgroundColor: 'rgba(15, 23, 42, 0.55)',
+            backdropFilter: 'blur(4px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 10000,
+            padding: '20px',
+          }}
+        >
+          <div
+            style={{
+              backgroundColor: '#FFFFFF',
+              borderRadius: '20px',
+              width: '100%',
+              maxWidth: '440px',
+              padding: '26px',
+              boxShadow: '0 25px 50px rgba(0, 0, 0, 0.25)',
+              border: '1px solid #E2E8F0',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>
+              <KeyRound size={22} color="var(--c-burgundy-800)" />
+              <h2 style={{ fontSize: '18px', fontWeight: 800, color: '#1F242E', margin: 0 }}>
+                Credencial temporal generada
+              </h2>
+            </div>
+
+            <p style={{ fontSize: '13px', color: '#4B5563', margin: '0 0 14px', lineHeight: 1.5 }}>
+              Entrega estas credenciales a <strong>{tempCredentials.nombre}</strong> ({tempCredentials.rol}). Por seguridad no volverá a mostrarse y el sistema exigirá cambiar la contraseña en el primer ingreso.
+            </p>
+
+            <div style={{
+              backgroundColor: '#FAF5F0',
+              border: '1px solid #EEDBCE',
+              borderRadius: '14px',
+              padding: '14px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '8px',
+              marginBottom: '16px',
+              fontSize: '13.5px',
+            }}>
+              <div><strong>RUT:</strong> {tempCredentials.rut}</div>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+                <div>
+                  <strong>Clave temporal:</strong>{' '}
+                  <code style={{ backgroundColor: '#FFFFFF', padding: '3px 8px', borderRadius: '6px', border: '1px solid #E2E8F0', fontWeight: 800 }}>
+                    {tempCredentials.password}
+                  </code>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    navigator.clipboard?.writeText(`RUT: ${tempCredentials.rut} | Clave temporal: ${tempCredentials.password}`);
+                    setCopiedPass(true);
+                  }}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    padding: '6px 10px',
+                    borderRadius: '8px',
+                    border: '1px solid #CBD5E1',
+                    backgroundColor: '#FFFFFF',
+                    fontSize: '12px',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                  }}
+                >
+                  {copiedPass ? <Check size={14} color="#16A34A" /> : <Copy size={14} />}
+                  <span>{copiedPass ? 'Copiado' : 'Copiar'}</span>
+                </button>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              className="btn-primary"
+              onClick={() => setTempCredentials(null)}
+              style={{ width: '100%', padding: '11px', borderRadius: '12px', fontSize: '13.5px', fontWeight: 700 }}
+            >
+              Entendido, cerrar
+            </button>
           </div>
         </div>
       )}
