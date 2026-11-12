@@ -1,110 +1,259 @@
-import { createContext, useContext, useState, useEffect } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { normalizeRut } from '../utils/rut';
+import { roleLog } from '../utils/roleLogger';
 
 // ──────────────────────────────────────────────────────────────────────────────
-// Variable global del backend. Sobreponible vía .env (VITE_API_URL)
+// Variable global del backend. Sobreponible vía .env (VITE_API_URL).
+// En producción (Railway / Docker SPA), usa ruta relativa ('')
 // ──────────────────────────────────────────────────────────────────────────────
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+const API_URL = import.meta.env.VITE_API_URL ?? (import.meta.env.DEV ? 'http://localhost:8000' : '');
 
 const AuthContext = createContext(null);
 
+function isClientRoute() {
+  if (typeof window === 'undefined') return false;
+  return /^\/(mesa|menu|cliente)(\/|$)/.test(window.location.pathname);
+}
+
 export function AuthProvider({ children }) {
-  // ──────────────────────────────────────────────────────────────────────────
-  // Estado: usuario autenticado (persistido en localStorage entre sesiones)
-  // ──────────────────────────────────────────────────────────────────────────
-  const [user, setUser] = useState(() => {
-    try {
-      const saved = localStorage.getItem('cest_doux_staff_user');
-      return saved ? JSON.parse(saved) : null;
-    } catch {
-      return null;
-    }
-  });
-
+  // Estado estrictamente en memoria (NO se guarda en localStorage por seguridad)
+  const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [initializing, setInitializing] = useState(() => !isClientRoute());
+  const [needsAdminSetup, setNeedsAdminSetup] = useState(false);
+  const [requiresSetupCode, setRequiresSetupCode] = useState(false);
 
-  // Persiste / limpia el usuario en localStorage cuando cambia
+  // Limpiar cualquier rastro legado inseguro en localStorage de versiones anteriores
   useEffect(() => {
-    if (user) {
-      localStorage.setItem('cest_doux_staff_user', JSON.stringify(user));
-    } else {
+    try {
       localStorage.removeItem('cest_doux_staff_user');
+      localStorage.removeItem('cest_doux_empleados_cache');
+      localStorage.removeItem('cest_doux_llamadas_garzon');
+      localStorage.removeItem('cest_doux_total_mesas');
+    } catch {
+      // Ignorar errores de almacenamiento
     }
-  }, [user]);
+  }, []);
 
-  // ──────────────────────────────────────────────────────────────────────────
-  // login — POST /empleados/login
-  //
-  // Cambios respecto a la versión anterior:
-  //  • Elimina el setTimeout falso
-  //  • Llama al endpoint real de autenticación
-  //  • Normaliza la respuesta del backend al shape { id, username, displayName, role, loginTime }
-  //  • Maneja errores 401/404 (credenciales inválidas) y errores de red
-  //  • Siempre devuelve { success: bool, user?: Object, error?: string }
-  // ──────────────────────────────────────────────────────────────────────────
-  /**
-   * Autentica a un empleado contra el backend.
-   *
-   * @param {string} username - Nombre de usuario / correo
-   * @param {string} password - Contraseña en texto plano (el backend la hashea)
-   * @returns {Promise<{ success: boolean, user?: Object, error?: string }>}
-   */
-  const login = async (username, password) => {
-    setLoading(true);
+  const refreshAuthSession = useCallback(async () => {
+    if (isClientRoute()) {
+      setInitializing(false);
+      return;
+    }
 
     try {
-      // El backend espera un form-encoded body para el endpoint estándar de
-      // FastAPI OAuth2 (/token) o un JSON body para /empleados/login.
-      // Ajusta el endpoint y el body según lo que tu backend implemente.
+      const statusRes = await fetch(`${API_URL}/auth/status`, {
+        credentials: 'include',
+      });
+      if (statusRes.ok) {
+        const statusData = await statusRes.json();
+        setNeedsAdminSetup(Boolean(statusData.needs_admin_setup));
+        setRequiresSetupCode(Boolean(statusData.requires_setup_code));
+
+        if (statusData.needs_admin_setup) {
+          setUser(null);
+          setInitializing(false);
+          return;
+        }
+      }
+
+      const meRes = await fetch(`${API_URL}/empleados/me`, {
+        credentials: 'include',
+      });
+      if (meRes.ok) {
+        const meData = await meRes.json();
+        const normalized = normalizeEmpleado(meData);
+        setUser(normalized);
+        roleLog(normalized.role, 'info', 'Sesión verificada correctamente');
+      } else {
+        setUser(null);
+      }
+    } catch {
+      setUser(null);
+    } finally {
+      setInitializing(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      refreshAuthSession();
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [refreshAuthSession]);
+
+  const setupInitialAdmin = async ({ rut, nombre, apellido, correo, telefono, password, confirmPassword, setupCode }) => {
+    setLoading(true);
+    try {
+      const res = await fetch(`${API_URL}/auth/setup-admin`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          rut: normalizeRut(rut),
+          nombre: nombre?.trim(),
+          apellido: apellido?.trim() || '',
+          correo: correo?.trim() || null,
+          telefono: telefono?.trim() || null,
+          password,
+          confirm_password: confirmPassword,
+          setup_code: setupCode?.trim() || null,
+        }),
+      });
+
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setLoading(false);
+        const msg =
+          body?.detail === 'INVALID_SETUP_CODE'
+            ? 'El código de activación es incorrecto.'
+            : body?.detail === 'SETUP_ALREADY_COMPLETED'
+              ? 'El administrador inicial ya fue configurado.'
+              : body?.detail || 'No se pudo configurar el administrador inicial.';
+        return { success: false, error: msg };
+      }
+
+      const userData = normalizeEmpleado(body.user);
+      setNeedsAdminSetup(false);
+      setUser(userData);
+      roleLog(userData.role, 'info', 'Administrador inicial activado');
+      setLoading(false);
+      return { success: true, user: userData };
+    } catch {
+      setLoading(false);
+      return {
+        success: false,
+        error: `No se pudo conectar con el servidor (${API_URL || 'local'}).`,
+      };
+    }
+  };
+
+  const login = async (rutOrUser, password) => {
+    setLoading(true);
+    try {
+      const trimmed = (rutOrUser || '').trim();
       const res = await fetch(`${API_URL}/empleados/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username: username?.trim(), password })
+        credentials: 'include',
+        body: JSON.stringify({
+          rut: normalizeRut(trimmed),
+          username: trimmed,
+          password,
+        }),
       });
 
       if (!res.ok) {
-        // 401 Unauthorized → credenciales incorrectas
-        // 404 Not Found    → usuario no existe
         const errBody = await res.json().catch(() => ({}));
-        const errMsg = errBody?.detail ?? `Error ${res.status} al autenticar`;
-        console.error('[AuthContext] login fallido:', res.status, errMsg);
+        const errCode = errBody?.detail ?? '';
+
+        let errorType = 'generic';
+        let message = `Error ${res.status} al autenticar`;
+
+        if (res.status === 401) {
+          errorType = 'invalid_credentials';
+          message = 'RUT o contraseña incorrectos.';
+        } else if (res.status === 503) {
+          errorType = 'database_error';
+          message = 'No se pudo conectar con la base de datos.';
+        } else if (res.status >= 500) {
+          errorType = 'backend_error';
+          message = 'Hubo un error en el backend.';
+        }
+
+        if (errCode && res.status !== 401 && res.status < 500) {
+          message = errCode;
+        }
         setLoading(false);
-        return { success: false, error: errMsg };
+        return { success: false, error: message, errorType };
       }
 
-      // El backend devuelve el objeto del empleado autenticado.
-      // Shape esperado (ajusta según tu respuesta real):
-      // { id_empleado, nombre, apellido, cargo, token? }
       const data = await res.json();
-      console.info('[AuthContext] Login exitoso:', data);
-
-      const userData = normalizeEmpleado(data, username);
+      const userData = normalizeEmpleado(data);
       setUser(userData);
+      roleLog(
+        userData.role,
+        'info',
+        userData.mustChangePassword
+          ? 'Primer ingreso: requiere cambio de contraseña'
+          : 'Inicio de sesión exitoso'
+      );
       setLoading(false);
       return { success: true, user: userData };
-
-    } catch (err) {
-      // Error de red (backend caído, CORS, sin conexión…)
-      console.error('[AuthContext] login error de red:', err);
+    } catch {
       setLoading(false);
-      return { success: false, error: 'No se pudo conectar con el servidor. Verifica tu conexión.' };
+      return {
+        success: false,
+        error: `El backend no está levantado o no responde (${API_URL || 'local'}).`,
+        errorType: 'backend_down',
+      };
     }
   };
 
-  // ──────────────────────────────────────────────────────────────────────────
-  // logout — limpia el estado local y localStorage
-  // ──────────────────────────────────────────────────────────────────────────
-  const logout = () => {
-    setUser(null);
-    // Opcional: llamar a POST /empleados/logout si el backend maneja tokens
-    // fetch(`${API_URL}/empleados/logout`, { method: 'POST' }).catch(() => {});
-    console.info('[AuthContext] Sesión cerrada');
+  const changePassword = async ({ newPassword, confirmPassword, currentPassword = '' }) => {
+    setLoading(true);
+    try {
+      const res = await fetch(`${API_URL}/empleados/cambiar-password`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          new_password: newPassword,
+          confirm_password: confirmPassword,
+          current_password: currentPassword || null,
+        }),
+      });
+
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setLoading(false);
+        return { success: false, error: body?.detail || 'No se pudo actualizar la contraseña.' };
+      }
+
+      const updatedUser = normalizeEmpleado(body.user);
+      setUser(updatedUser);
+      roleLog(updatedUser.role, 'info', 'Contraseña definitiva activada');
+      setLoading(false);
+      return { success: true, user: updatedUser };
+    } catch {
+      setLoading(false);
+      return { success: false, error: 'Error de conexión al actualizar la contraseña.' };
+    }
   };
 
-  // ──────────────────────────────────────────────────────────────────────────
-  // Context value — misma firma que la versión anterior para no romper la UI
-  // ──────────────────────────────────────────────────────────────────────────
+  const logout = async () => {
+    const activeRole = user?.role;
+    try {
+      await fetch(`${API_URL}/empleados/logout`, {
+        method: 'POST',
+        credentials: 'include',
+      });
+    } catch {
+      // Ignorar fallo de red en cierre de sesión
+    }
+    setUser(null);
+    if (activeRole) {
+      roleLog(activeRole, 'info', 'Sesión cerrada');
+    }
+  };
+
   return (
-    <AuthContext.Provider value={{ user, isAuthenticated: !!user, login, logout, loading }}>
+    <AuthContext.Provider
+      value={{
+        user,
+        isAuthenticated: !!user,
+        mustChangePassword: Boolean(user?.mustChangePassword),
+        initializing,
+        needsAdminSetup,
+        requiresSetupCode,
+        setupInitialAdmin,
+        login,
+        changePassword,
+        logout,
+        refreshAuthSession,
+        loading,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );
@@ -118,61 +267,32 @@ export function useAuth() {
   return context;
 }
 
-// ──────────────────────────────────────────────────────────────────────────────
-// Helpers privados
-// ──────────────────────────────────────────────────────────────────────────────
-
-/**
- * Normaliza la respuesta del backend de empleado al shape que usan los
- * componentes de la UI: { id, username, displayName, role, loginTime }.
- *
- * Adapta los nombres de campo según lo que devuelva tu endpoint real.
- *
- * @param {Object} data     - Respuesta JSON del backend
- * @param {string} username - Username original enviado en el formulario (fallback)
- */
-function normalizeEmpleado(data, username) {
-  // Intenta leer el cargo/rol desde el campo que devuelva el backend
-  const rawCargo = data.cargo ?? data.rol ?? data.role ?? '';
-  const role = mapCargoToRole(rawCargo, username);
-
-  // Construye el nombre de visualización
+function normalizeEmpleado(data) {
+  const rawCargo = data?.cargo ?? data?.rol ?? data?.role ?? '';
+  const role = mapCargoToRole(rawCargo);
   const displayName =
-    data.nombre && data.apellido
-      ? `${data.nombre} ${data.apellido}`
-      : data.nombre ?? data.displayName ?? capitalize(username) ?? 'Personal de Turno';
+    data?.nombre && data?.apellido
+      ? `${data.nombre} ${data.apellido}`.trim()
+      : data?.nombre ?? data?.displayName ?? 'Personal de Turno';
 
   return {
-    id: data.id_empleado ?? data.id ?? Date.now(),
-    username: data.username ?? username ?? 'empleado',
+    id: data?.id ?? data?._id,
+    rut: data?.rut ?? '',
+    username: data?.username ?? data?.rut ?? 'empleado',
     displayName,
     role,
+    mustChangePassword: Boolean(data?.must_change_password),
     loginTime: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-    // Preserva el token JWT si el backend lo entrega, por si se necesita en headers futuros
-    token: data.token ?? data.access_token ?? null
   };
 }
 
-/**
- * Mapea el campo cargo del backend al rol interno que la UI conoce.
- */
-function mapCargoToRole(cargo, username = '') {
+function mapCargoToRole(cargo) {
   const c = (cargo ?? '').toLowerCase();
-  const u = (username ?? '').toLowerCase();
-
-  if (c.includes('admin') || c.includes('gerente') || u.includes('admin') || u === 'gerente') {
+  if (c.includes('admin') || c.includes('gerente')) {
     return 'Administrador';
   }
-  if (c.includes('cocin') || c.includes('chef') || u.includes('coci') || u === 'chef') {
+  if (c.includes('cocin') || c.includes('chef')) {
     return 'Cocina';
   }
-  if (c.includes('mesero') || c.includes('cajero') || c.includes('mozo') || c.includes('garzon') || c.includes('garzón') || u.includes('garzon') || u.includes('mesero')) {
-    return 'Garzón';
-  }
-  return 'Garzón'; // Rol por defecto
-}
-
-function capitalize(str) {
-  if (!str) return '';
-  return str.charAt(0).toUpperCase() + str.slice(1);
+  return 'Garzón';
 }

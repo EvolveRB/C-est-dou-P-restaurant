@@ -5,7 +5,7 @@ import ProductDetailModal from '../../components/client/ProductDetailModal';
 import { useRestaurant } from '../../context/RestaurantContext';
 import { UtensilsCrossed, RotateCcw } from 'lucide-react';
 
-export const isGlutenFreeTag = (tag) => {
+const isGlutenFreeTag = (tag) => {
   if (!tag || typeof tag !== 'string') return false;
   const lower = tag.toLowerCase().trim();
   return (

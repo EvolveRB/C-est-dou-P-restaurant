@@ -1,10 +1,11 @@
 import { useState } from 'react';
 import { useRestaurant } from '../../context/RestaurantContext';
 import CookOrderModal from '../../components/employee/CookOrderModal';
+import RoleLogsPanel from '../../components/employee/RoleLogsPanel';
 import { Utensils, BellRing } from 'lucide-react';
 
 export default function GarzonTablesPage() {
-  const { tables, llamadasGarzon, atenderLlamada } = useRestaurant();
+  const { tables, llamadasGarzon, atenderLlamada, updateTableStatus } = useRestaurant();
   const [selectedTable, setSelectedTable] = useState(null);
   const [filter, setFilter] = useState('todas'); // 'todas', 'ocupadas', 'libres'
 
@@ -279,6 +280,8 @@ export default function GarzonTablesPage() {
             );
           })}
         </div>
+
+        <RoleLogsPanel roleLabel="Garzón" />
       </div>
 
       {/* Modal de Comanda al pulsar una mesa con pedido */}
@@ -287,6 +290,7 @@ export default function GarzonTablesPage() {
           table={currentModalTable}
           mesa={currentModalTable}
           onClose={() => setSelectedTable(null)}
+          onUpdateStatus={updateTableStatus}
         />
       )}
     </div>

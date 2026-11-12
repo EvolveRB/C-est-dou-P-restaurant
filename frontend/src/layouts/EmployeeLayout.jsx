@@ -1,30 +1,38 @@
+import { lazy, Suspense } from 'react';
 import { Outlet } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import EmployeeLoginPage from '../pages/employee/EmployeeLoginPage';
 import StaffNavbar from '../components/employee/StaffNavbar';
-import AdminLayout from './AdminLayout';
-import GarzonLayout from './GarzonLayout';
 import '../styles/employee.css';
 
-export default function EmployeeLayout() {
-  const { isAuthenticated, user } = useAuth();
+const AdminLayout = lazy(() => import('./AdminLayout'));
+const GarzonLayout = lazy(() => import('./GarzonLayout'));
 
-  // Si no ha iniciado sesión, la vista principal siempre muestra el inicio de sesión centrado
-  if (!isAuthenticated) {
+export default function EmployeeLayout() {
+  const { isAuthenticated, mustChangePassword, user } = useAuth();
+
+  // Si no ha iniciado sesión o debe cambiar su contraseña temporal en primer ingreso,
+  // permanece en el mismo layout de login.
+  if (!isAuthenticated || mustChangePassword) {
     return <EmployeeLoginPage />;
   }
 
-  // Layout especializado para el Administrador
   if (user?.role === 'Administrador') {
-    return <AdminLayout />;
+    return (
+      <Suspense fallback={<div style={{ padding: '40px', textAlign: 'center' }}>Cargando panel...</div>}>
+        <AdminLayout />
+      </Suspense>
+    );
   }
 
-  // Layout especializado para el Garzón (solo mesas)
   if (user?.role === 'Garzón' || user?.role === 'Mesero') {
-    return <GarzonLayout />;
+    return (
+      <Suspense fallback={<div style={{ padding: '40px', textAlign: 'center' }}>Cargando salón...</div>}>
+        <GarzonLayout />
+      </Suspense>
+    );
   }
 
-  // Layout para Cocina / Personal general
   return (
     <div className="staff-layout-container">
       <StaffNavbar />

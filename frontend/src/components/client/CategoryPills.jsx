@@ -3,8 +3,7 @@ import { CATEGORIES } from '../../data/initialProducts';
 import { X } from 'lucide-react';
 
 // Hook interno para scroll táctil fluido y arrastre por mouse en pantallas móviles y desktop
-function useSwipeScroll() {
-  const scrollRef = useRef(null);
+function useSwipeScroll(scrollRef) {
   const isDownRef = useRef(false);
   const startXRef = useRef(0);
   const scrollLeftRef = useRef(0);
@@ -72,7 +71,6 @@ function useSwipeScroll() {
   };
 
   return {
-    scrollRef,
     handlers: {
       onMouseDown: handleMouseDown,
       onMouseMove: handleMouseMove,
@@ -93,14 +91,16 @@ export default function CategoryPills({
   onSelectTag,
   availableTags = []
 }) {
-  const catSwipe = useSwipeScroll();
-  const tagSwipe = useSwipeScroll();
+  const catScrollRef = useRef(null);
+  const tagScrollRef = useRef(null);
+  const catSwipe = useSwipeScroll(catScrollRef);
+  const tagSwipe = useSwipeScroll(tagScrollRef);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
       {/* 1. Fila de Categorías Principales (Desplazable con el tactil en teléfono) */}
       <div
-        ref={catSwipe.scrollRef}
+        ref={catScrollRef}
         {...catSwipe.handlers}
         className="category-pills-row"
         role="tablist"
@@ -126,7 +126,7 @@ export default function CategoryPills({
       {availableTags && availableTags.length > 0 && (
         <div className="tag-filter-wrapper">
           <div
-            ref={tagSwipe.scrollRef}
+            ref={tagScrollRef}
             {...tagSwipe.handlers}
             className="tag-filter-row"
             role="toolbar"

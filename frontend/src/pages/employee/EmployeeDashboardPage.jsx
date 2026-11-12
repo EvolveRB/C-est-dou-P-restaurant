@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useRestaurant } from '../../context/RestaurantContext';
 import CookOrderModal from '../../components/employee/CookOrderModal';
+import RoleLogsPanel from '../../components/employee/RoleLogsPanel';
 import { EyeOff, Eye, Utensils, RotateCcw } from 'lucide-react';
 
 export default function EmployeeDashboardPage() {
@@ -580,6 +581,10 @@ export default function EmployeeDashboardPage() {
             </div>
           </div>
         )}
+
+        <div style={{ padding: '0 32px 24px' }}>
+          <RoleLogsPanel roleLabel="Cocinero" />
+        </div>
       </div>
 
       {/* POPUP MODAL (Comanda y Cambio de Estado) */}

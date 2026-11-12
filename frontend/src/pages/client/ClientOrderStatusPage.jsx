@@ -1,9 +1,9 @@
-import { Clock, ChefHat, CheckCircle2, Utensils, BellRing, RefreshCw } from 'lucide-react';
+import { Clock, ChefHat, CheckCircle2, Utensils, BellRing } from 'lucide-react';
 import { useCart } from '../../context/CartContext';
 import { formatPrice } from '../../data/initialProducts';
 
 export default function ClientOrderStatusPage({ onGoToMenu }) {
-  const { activeOrder, tableNumber, resetActiveTable, solicitarGarzon, callingWaiter } = useCart();
+  const { activeOrder, tableNumber, solicitarGarzon, callingWaiter } = useCart();
 
   const handleLlamarGarzon = () => {
     solicitarGarzon('Consulta sobre el pedido / Servicio');
@@ -207,28 +207,6 @@ export default function ClientOrderStatusPage({ onGoToMenu }) {
         >
           <BellRing size={16} />
           <span>{callingWaiter ? 'Notificando al Garzón...' : 'Llamar al Garzón'}</span>
-        </button>
-
-        <button
-          onClick={resetActiveTable}
-          style={{
-            width: '100%',
-            background: 'transparent',
-            color: '#6B7280',
-            border: '1px solid #D1D5DB',
-            padding: '10px',
-            borderRadius: 'var(--radius-pill)',
-            fontWeight: 600,
-            fontSize: '13px',
-            cursor: 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: '6px'
-          }}
-        >
-          <RefreshCw size={14} />
-          <span>Liberar mesa / Comenzar nuevo pedido</span>
         </button>
       </div>
     </div>

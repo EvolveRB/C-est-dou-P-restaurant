@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { X, Clock, Plus, Minus, ChefHat, Ban, Tag, UtensilsCrossed } from 'lucide-react';
 import { formatPrice } from '../../data/initialProducts';
 import { useCart } from '../../context/CartContext';
@@ -15,14 +15,16 @@ function formatDishUrl(src) {
 export default function ProductDetailModal({ product, onClose }) {
   const [qty, setQty] = useState(1);
   const [notes, setNotes] = useState('');
+  const [prevImagen, setPrevImagen] = useState(product?.imagen);
   const [imgError, setImgError] = useState(false);
   const [currentSrc, setCurrentSrc] = useState(() => formatDishUrl(product?.imagen));
   const { addToCart } = useCart();
 
-  useEffect(() => {
+  if (prevImagen !== product?.imagen) {
+    setPrevImagen(product?.imagen);
     setCurrentSrc(formatDishUrl(product?.imagen));
     setImgError(false);
-  }, [product?.imagen]);
+  }
 
   const handleImgError = () => {
     if (currentSrc && !currentSrc.startsWith('/Imagenes/')) {
