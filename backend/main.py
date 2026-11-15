@@ -1,7 +1,9 @@
 import os
+import re
 import hmac
+import secrets
 from contextlib import asynccontextmanager
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 from typing import Optional, List, Union
 
 from bson import ObjectId
@@ -9,10 +11,12 @@ from fastapi import FastAPI, Depends, HTTPException, Body, Request, Response
 from fastapi.encoders import ENCODERS_BY_TYPE
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from database import get_db, get_sqlite_db, init_sqlite_db
+from email_service import send_receipt_email
 from models import Usuario, PerfilLog
 from security import (
     SESSION_COOKIE_NAME,
@@ -60,29 +64,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-# ==============================================================================
-# ARCHIVOS ESTÁTICOS — Servir imágenes de los productos desde /Imagenes
-# ==============================================================================
-imagenes_dir = os.path.join(os.path.dirname(__file__), "Imagenes")
-if not os.path.exists(imagenes_dir):
-    os.makedirs(imagenes_dir, exist_ok=True)
-
-try:
-    from fastapi.staticfiles import StaticFiles
-    app.mount("/Imagenes", StaticFiles(directory=imagenes_dir), name="imagenes")
-except Exception as static_err:
-    StaticFiles = None
-    print(f"[STATIC INFO] Servidor de estáticos fallback FileResponse activo: {static_err}")
-
-
-@app.get("/Imagenes/{nombre_archivo}", tags=["Archivos"])
-async def obtener_imagen_estatica(nombre_archivo: str):
-    ruta = os.path.join(imagenes_dir, nombre_archivo)
-    if os.path.exists(ruta):
-        return FileResponse(ruta)
-    raise HTTPException(status_code=404, detail="Imagen no encontrada")
-
 
 # ==============================================================================
 # HELPERS — serialización, roles, cookies y bitácora por perfil (SQLite)
@@ -215,58 +196,38 @@ def require_roles(*allowed_roles: str):
     return dependency
 
 
-MAPA_IMAGENES_POR_NOMBRE = {
-    "plato principal alpha": "plato_alpha.jpg",
-    "entrada especial beta": "entrada_beta.jpg",
-    "sopa tradicional gamma": "sopa_gamma.jpg",
-    "corte de carne delta": "corte_delta.jpg",
-    "pasta artesanal epsilon": "pasta_epsilon.jpg",
-    "postre tentación zeta": "postreUV.jpeg",
-    "postre tentacion zeta": "postreUV.jpeg",
-    "carpaccio de res trufado": "carpaccio_trufado.jpg",
-    "bisque de mariscos del puerto": "bisque_mariscos.jpg",
-    "ravioles de ricotta y nueces": "ravioles_ricotta.jpg",
-    "limonada menta jengibre": "limonada_menta.jpg",
-    "copa de vino reserva syrah": "vino_reserva.jpg",
-}
-
-MAPA_IMAGENES_POR_ID = {
-    1: "plato_alpha.jpg",
-    2: "entrada_beta.jpg",
-    3: "sopa_gamma.jpg",
-    4: "corte_delta.jpg",
-    5: "pasta_epsilon.jpg",
-    6: "postreUV.jpeg",
-    7: "carpaccio_trufado.jpg",
-    8: "bisque_mariscos.jpg",
-    9: "ravioles_ricotta.jpg",
-    10: "limonada_menta.jpg",
-    11: "vino_reserva.jpg",
-}
+EMAIL_REGEX = re.compile(r"^[^\s@]+@[^\s@]+\.[^\s@]+$")
 
 
-def resolver_imagen_producto(doc: dict) -> str:
-    """Garantiza que siempre retorne la ruta de imagen correcta del catálogo."""
+def now_chile_dt() -> datetime:
+    chile_tz = timezone(timedelta(hours=-3))
+    return datetime.now(chile_tz)
+
+
+def normalize_category_name(raw_cat: Optional[str]) -> str:
+    c = (raw_cat or "").strip()
+    if not c:
+        return "Platos de Fondo"
+    if c.lower() == "postre":
+        return "Postres"
+    return c
+
+
+def resolver_imagen_producto(doc: dict) -> Optional[str]:
+    """Resuelve la URL de imagen del producto (Azure Blob Storage o URL externa, sin archivos locales)."""
+    azure_base = (os.getenv("AZURE_BLOB_BASE_URL") or "").strip().rstrip("/")
     img = doc.get("imagen")
-    if img and str(img).strip():
-        img_str = str(img).strip()
-        if img_str.startswith("http://") or img_str.startswith("https://") or img_str.startswith("/"):
-            return img_str
-        return f"/Imagenes/{img_str.lstrip('/')}"
-
-    nombre_norm = str(doc.get("nombre", "")).strip().lower()
-    if nombre_norm in MAPA_IMAGENES_POR_NOMBRE:
-        return f"/Imagenes/{MAPA_IMAGENES_POR_NOMBRE[nombre_norm]}"
-
-    for k, v in MAPA_IMAGENES_POR_NOMBRE.items():
-        if k in nombre_norm or nombre_norm in k:
-            return f"/Imagenes/{v}"
-
-    id_plato = doc.get("id_plato")
-    if id_plato in MAPA_IMAGENES_POR_ID:
-        return f"/Imagenes/{MAPA_IMAGENES_POR_ID[id_plato]}"
-
-    return "/Imagenes/plato_alpha.jpg"
+    if not img or not str(img).strip():
+        return None
+    img_str = str(img).strip()
+    if img_str.startswith("http://") or img_str.startswith("https://") or img_str.startswith("data:"):
+        return img_str
+    clean_name = img_str.lstrip("/\\")
+    if clean_name.lower().startswith("imagenes/"):
+        clean_name = clean_name[9:]
+    if azure_base and clean_name:
+        return f"{azure_base}/{clean_name}"
+    return None
 
 
 def serializar_doc(val):
@@ -329,10 +290,41 @@ class ProductoCreate(BaseModel):
     categoria: str = "Platos de Fondo"
     precio: float
     etiquetas: List[str] = []
-    disponibilidad: str = "En stock"
+    disponibilidad: Union[bool, str] = "En stock"
     imagen: Optional[str] = None
     tiempo_preparacion: int = 15
     descripcion: Optional[str] = None
+    destacado: bool = False
+
+
+class ProductoUpdate(BaseModel):
+    nombre: Optional[str] = None
+    categoria: Optional[str] = None
+    precio: Optional[float] = None
+    etiquetas: Optional[List[str]] = None
+    disponibilidad: Optional[Union[bool, str]] = None
+    imagen: Optional[str] = None
+    tiempo_preparacion: Optional[int] = None
+    descripcion: Optional[str] = None
+    destacado: Optional[bool] = None
+
+
+class CategoriaInput(BaseModel):
+    nombre: str
+
+
+class CategoriaRenameInput(BaseModel):
+    nombre_actual: str
+    nombre_nuevo: str
+
+
+class EtiquetaInput(BaseModel):
+    nombre: str
+
+
+class EtiquetaRenameInput(BaseModel):
+    nombre_actual: str
+    nombre_nuevo: str
 
 
 class ProductoUpdatePrecio(BaseModel):
@@ -359,6 +351,14 @@ class PedidoCreate(BaseModel):
     hora_pedido: Optional[str] = None
     items: Optional[List[ItemPedido]] = []
     notas: Optional[str] = None
+    sucursal: Optional[str] = "Local 1 - Casa Matriz"
+
+
+class PagoMesaInput(BaseModel):
+    correo_cliente: str
+    metodo_pago: str = "tarjeta"
+    propina_porcentaje: int = 10
+    sucursal: Optional[str] = "Local 1 - Casa Matriz"
 
 
 class SolicitudGarzon(BaseModel):
@@ -990,15 +990,63 @@ async def crear_mesa(
         raise HTTPException(status_code=500, detail=repr(e))
 
 
+async def ensure_carta_config(db) -> dict:
+    doc = await db.carta_config.find_one({"_id": "filtros"})
+    if not doc:
+        doc = {
+            "_id": "filtros",
+            "categorias": ["Entradas", "Sopas", "Platos de Fondo", "Pastas", "Postres", "Bebidas"],
+            "etiquetas": ["Sin Gluten", "Vegetariano", "Vegano", "Chef Choice", "Especialidad"],
+        }
+        await db.carta_config.insert_one(doc)
+    return doc
+
+
 @app.post("/productos", tags=["1. INSERT (3)"])
 async def crear_producto(
     producto: ProductoCreate,
-    _staff: Usuario = Depends(require_roles("Cocinero", "Administrador")),
+    staff: Usuario = Depends(require_roles("Cocinero", "Administrador")),
     db=Depends(get_db),
+    sqlite_db: Session = Depends(get_sqlite_db),
 ):
     try:
-        resultado = await db.producto.insert_one(producto.model_dump())
+        prod_dict = producto.model_dump()
+        prod_dict["nombre"] = prod_dict["nombre"].strip()
+        if not prod_dict["nombre"]:
+            raise HTTPException(status_code=400, detail="El nombre del plato es obligatorio")
+        prod_dict["categoria"] = normalize_category_name(prod_dict.get("categoria"))
+        if isinstance(prod_dict.get("disponibilidad"), bool):
+            prod_dict["disponibilidad"] = "En stock" if prod_dict["disponibilidad"] else "Agotado"
+        prod_dict["etiquetas"] = [str(t).strip() for t in (prod_dict.get("etiquetas") or []) if str(t).strip()]
+        prod_dict["imagen"] = (prod_dict.get("imagen") or "").strip() or None
+        prod_dict["created_at"] = now_chile_dt().isoformat()
+
+        resultado = await db.producto.insert_one(prod_dict)
+
+        cfg = await ensure_carta_config(db)
+        cats = list(cfg.get("categorias") or [])
+        tags = list(cfg.get("etiquetas") or [])
+        if prod_dict["categoria"] not in cats:
+            cats.append(prod_dict["categoria"])
+        for t in prod_dict["etiquetas"]:
+            if t not in tags:
+                tags.append(t)
+        await db.carta_config.update_one(
+            {"_id": "filtros"},
+            {"$set": {"categorias": cats, "etiquetas": tags}},
+            upsert=True,
+        )
+
+        registrar_log(
+            sqlite_db,
+            staff,
+            staff.rol,
+            "Plato agregado",
+            f"{prod_dict['nombre']} ({prod_dict['categoria']})",
+        )
         return {"mensaje": "Producto creado", "id": str(resultado.inserted_id)}
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=repr(e))
 
@@ -1017,12 +1065,10 @@ async def crear_pedido(pedido: PedidoCreate, db=Depends(get_db)):
             pass
 
         if not pedido_dict.get("hora_pedido"):
-            try:
-                from datetime import timezone, timedelta
-                chile_tz = timezone(timedelta(hours=-3))
-                pedido_dict["hora_pedido"] = datetime.now(chile_tz).strftime("%H:%M")
-            except Exception:
-                pedido_dict["hora_pedido"] = datetime.now().strftime("%H:%M")
+            pedido_dict["hora_pedido"] = now_chile_dt().strftime("%H:%M")
+
+        if not pedido_dict.get("sucursal"):
+            pedido_dict["sucursal"] = "Local 1 - Casa Matriz"
 
         items_nuevos = pedido_dict.get("items") or []
         filtro_mesa = await build_mesa_pedidos_filter(pedido_dict["num_mesa"], db)
@@ -1065,6 +1111,7 @@ async def crear_pedido(pedido: PedidoCreate, db=Depends(get_db)):
         pedido_dict["subtotal"] = subtotal
         pedido_dict["total"] = subtotal
         pedido_dict["estado_pedido"] = "Pendiente"
+        pedido_dict["fecha_creacion"] = now_chile_dt().isoformat()
 
         await db.pedidos.update_many(
             {**filtro_mesa, "estado_pedido": {"$nin": ["Entregado", "Archivado"]}},
@@ -1110,30 +1157,71 @@ async def crear_visita(visita: VisitaCreate, db=Depends(get_db)):
 # 2. SELECT (MongoDB Atlas)
 # ==============================================================================
 @app.get("/productos/filtrados", tags=["2. SELECT (3)"])
-async def select_productos_por_precio(precio_maximo: float = 10000, db=Depends(get_db)):
+async def select_productos_por_precio(precio_maximo: Optional[float] = None, db=Depends(get_db)):
     """
-    Obtiene los productos con precio menor al filtro desde la colección 'producto'.
-    Garantiza que cada plato tenga su imagen correspondiente resuelta y sincronizada.
+    Obtiene los productos del catálogo desde la colección 'producto'.
+    Resuelve URLs hacia Azure Blob Storage si está configurado, sin modificar la BD en GET.
     """
     try:
+        query = {"precio": {"$lt": precio_maximo}} if precio_maximo is not None else {}
         cursor = db.producto.find(
-            {"precio": {"$lt": precio_maximo}},
-            {"_id": 1, "id_plato": 1, "nombre": 1, "precio": 1, "disponibilidad": 1,
-             "categoria": 1, "descripcion": 1, "tiempo_preparacion": 1, "imagen": 1,
-             "etiquetas": 1},
+            query,
+            {
+                "_id": 1,
+                "id_plato": 1,
+                "nombre": 1,
+                "precio": 1,
+                "disponibilidad": 1,
+                "categoria": 1,
+                "descripcion": 1,
+                "tiempo_preparacion": 1,
+                "imagen": 1,
+                "etiquetas": 1,
+                "destacado": 1,
+            },
         )
-        docs = await cursor.to_list(length=200)
+        docs = await cursor.to_list(length=500)
         docs_con_imagen = []
         for d in docs:
-            img_res = resolver_imagen_producto(d)
-            if not d.get("imagen") or d.get("imagen") != img_res:
-                d["imagen"] = img_res
-                try:
-                    await db.producto.update_one({"_id": d["_id"]}, {"$set": {"imagen": img_res}})
-                except Exception:
-                    pass
+            d["categoria"] = normalize_category_name(d.get("categoria"))
+            d["imagen"] = resolver_imagen_producto(d)
             docs_con_imagen.append(serializar_doc(d))
         return docs_con_imagen
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=repr(e))
+
+
+@app.get("/catalogo/filtros", tags=["Catálogo"])
+async def obtener_filtros_catalogo(db=Depends(get_db)):
+    """Retorna categorías y etiquetas activas combinando configuración maestra y platos registrados."""
+    try:
+        cfg = await ensure_carta_config(db)
+        prods = await db.producto.find({}, {"categoria": 1, "etiquetas": 1}).to_list(length=500)
+
+        cat_counts = {}
+        for c in cfg.get("categorias") or []:
+            c_norm = normalize_category_name(c)
+            if c_norm and c_norm not in cat_counts:
+                cat_counts[c_norm] = 0
+
+        tag_counts = {}
+        for t in cfg.get("etiquetas") or []:
+            t_clean = str(t).strip()
+            if t_clean and t_clean not in tag_counts:
+                tag_counts[t_clean] = 0
+
+        for p in prods:
+            c_norm = normalize_category_name(p.get("categoria"))
+            cat_counts[c_norm] = cat_counts.get(c_norm, 0) + 1
+            for raw_t in (p.get("etiquetas") or []):
+                t_clean = str(raw_t).strip()
+                if t_clean:
+                    tag_counts[t_clean] = tag_counts.get(t_clean, 0) + 1
+
+        return {
+            "categorias": [{"nombre": k, "count": v} for k, v in cat_counts.items()],
+            "etiquetas": [{"nombre": k, "count": v} for k, v in tag_counts.items()],
+        }
     except Exception as e:
         raise HTTPException(status_code=500, detail=repr(e))
 
@@ -1317,6 +1405,224 @@ async def liberar_mesa(num_mesa: int, db=Depends(get_db)):
         raise HTTPException(status_code=500, detail=repr(e))
 
 
+METODOS_PAGO_LABELS = {
+    "tarjeta": "Tarjeta Débito / Crédito",
+    "efectivo": "Efectivo",
+    "transferencia": "Transferencia electrónica",
+}
+
+
+@app.post("/mesas/{num_mesa}/pagar", tags=["Pagos y Comprobantes"])
+async def pagar_y_liberar_mesa(num_mesa: int, pago: PagoMesaInput, db=Depends(get_db)):
+    """
+    Registra el pago completo de la mesa, envía comprobante electrónico al 100% de los clientes
+    por correo y libera la mesa automáticamente.
+    """
+    try:
+        correo = (pago.correo_cliente or "").strip().lower()
+        if not correo or not EMAIL_REGEX.match(correo):
+            raise HTTPException(
+                status_code=400,
+                detail="Ingresa un correo electrónico válido para enviar tu comprobante.",
+            )
+
+        metodo = (pago.metodo_pago or "tarjeta").strip().lower()
+        if metodo not in METODOS_PAGO_LABELS:
+            metodo = "tarjeta"
+
+        propina_pct = max(0, min(50, int(pago.propina_porcentaje or 0)))
+        sucursal = (pago.sucursal or "Local 1 - Casa Matriz").strip()
+
+        filtro_mesa = await build_mesa_pedidos_filter(num_mesa, db)
+        pedidos_activos = await db.pedidos.find(
+            {**filtro_mesa, "estado_pedido": {"$nin": ["Archivado", "Entregado"]}}
+        ).sort("_id", -1).to_list(length=50)
+
+        items_totales = []
+        pedido_principal_id = None
+        for idx, ped in enumerate(pedidos_activos):
+            if idx == 0:
+                pedido_principal_id = str(ped["_id"])
+                sucursal = ped.get("sucursal") or sucursal
+            items_totales.extend(ped.get("items") or [])
+
+        subtotal = sum(
+            float(it.get("precio_unitario", 0) or 0) * int(it.get("cantidad", 1) or 1)
+            for it in items_totales
+        )
+        if subtotal <= 0 and pedidos_activos:
+            subtotal = sum(float(p.get("total") or p.get("subtotal") or 0) for p in pedidos_activos)
+
+        propina_monto = round(subtotal * propina_pct / 100)
+        total_pagado = round(subtotal + propina_monto)
+
+        ahora = now_chile_dt()
+        codigo_comprobante = f"CDP-{ahora.strftime('%Y%m%d')}-{secrets.token_hex(3).upper()}"
+
+        transaccion_doc = {
+            "comprobante_codigo": codigo_comprobante,
+            "num_mesa": num_mesa,
+            "pedido_id": pedido_principal_id,
+            "sucursal": sucursal,
+            "items": items_totales,
+            "subtotal": subtotal,
+            "propina_porcentaje": propina_pct,
+            "propina_monto": propina_monto,
+            "total_pagado": total_pagado,
+            "metodo_pago": metodo,
+            "metodo_pago_label": METODOS_PAGO_LABELS[metodo],
+            "correo_cliente": correo,
+            "fecha_pago": ahora.isoformat(),
+            "fecha_legible": ahora.strftime("%d/%m/%Y %H:%M"),
+            "comprobante_solicitado": True,
+            "comprobante_enviado": False,
+            "estado_envio_correo": "procesando",
+            "detalle_envio_correo": "",
+        }
+
+        email_result = await send_receipt_email(correo, transaccion_doc)
+        transaccion_doc["comprobante_enviado"] = bool(email_result.get("sent"))
+        transaccion_doc["estado_envio_correo"] = email_result.get("status", "registrado")
+        transaccion_doc["detalle_envio_correo"] = email_result.get("detail", "")
+
+        res_tx = await db.transacciones.insert_one(transaccion_doc)
+        tx_id = str(res_tx.inserted_id)
+
+        await db.mesas.update_one(
+            {"$or": [{"num_mesa": num_mesa}, {"num_mesa": str(num_mesa)}]},
+            {"$set": {"estado": "Libre", "num_mesa": num_mesa, "visita_activa_id": None}},
+            upsert=True,
+        )
+
+        await db.pedidos.update_many(
+            {**filtro_mesa, "estado_pedido": {"$nin": ["Archivado", "Entregado"]}},
+            {
+                "$set": {
+                    "estado_pedido": "Entregado",
+                    "pagado": True,
+                    "transaccion_id": tx_id,
+                    "comprobante_codigo": codigo_comprobante,
+                    "metodo_pago": metodo,
+                    "propina_porcentaje": propina_pct,
+                    "propina_monto": propina_monto,
+                    "total_pagado": total_pagado,
+                    "correo_cliente": correo,
+                    "fecha_pago": ahora.isoformat(),
+                }
+            },
+        )
+
+        await db.visitas.update_many(
+            {"$or": [{"num_mesa": num_mesa}, {"num_mesa": str(num_mesa)}]},
+            {
+                "$set": {"estado_visita": "Finalizada", "solicitud_garzon.activa": False},
+                "$push": {
+                    "pagos": {
+                        "transaccion_id": tx_id,
+                        "metodo": METODOS_PAGO_LABELS[metodo],
+                        "monto": total_pagado,
+                        "propina": propina_monto,
+                        "correo": correo,
+                        "hora": ahora.isoformat(),
+                    }
+                },
+            },
+        )
+
+        return {
+            "mensaje": f"Pago registrado y Mesa {num_mesa} liberada",
+            "transaccion_id": tx_id,
+            "comprobante_codigo": codigo_comprobante,
+            "correo_cliente": correo,
+            "comprobante_enviado": transaccion_doc["comprobante_enviado"],
+            "estado_envio_correo": transaccion_doc["estado_envio_correo"],
+            "detalle_envio_correo": transaccion_doc["detalle_envio_correo"],
+            "subtotal": subtotal,
+            "propina_monto": propina_monto,
+            "total_pagado": total_pagado,
+            "metodo_pago": metodo,
+            "fecha_legible": transaccion_doc["fecha_legible"],
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=repr(e))
+
+
+@app.put("/productos/{id_producto}", tags=["3. UPDATE (2)"])
+async def update_producto_completo(
+    id_producto: str,
+    data: ProductoUpdate,
+    staff: Usuario = Depends(require_roles("Cocinero", "Administrador")),
+    db=Depends(get_db),
+    sqlite_db: Session = Depends(get_sqlite_db),
+):
+    """Actualiza todos los campos editables de un plato del catálogo (incluyendo categoría, etiquetas e imagen Azure)."""
+    try:
+        filtro = build_producto_filter(id_producto)
+        updates = {}
+        payload = data.model_dump(exclude_unset=True)
+
+        if "nombre" in payload and payload["nombre"] is not None:
+            clean_name = payload["nombre"].strip()
+            if not clean_name:
+                raise HTTPException(status_code=400, detail="El nombre del plato no puede estar vacío.")
+            updates["nombre"] = clean_name
+        if "categoria" in payload and payload["categoria"] is not None:
+            updates["categoria"] = normalize_category_name(payload["categoria"])
+        if "precio" in payload and payload["precio"] is not None:
+            updates["precio"] = float(payload["precio"])
+        if "etiquetas" in payload and payload["etiquetas"] is not None:
+            updates["etiquetas"] = [str(t).strip() for t in payload["etiquetas"] if str(t).strip()]
+        if "disponibilidad" in payload and payload["disponibilidad"] is not None:
+            disp_val = payload["disponibilidad"]
+            updates["disponibilidad"] = ("En stock" if disp_val else "Agotado") if isinstance(disp_val, bool) else disp_val
+        if "imagen" in payload:
+            updates["imagen"] = (payload["imagen"] or "").strip() or None
+        if "tiempo_preparacion" in payload and payload["tiempo_preparacion"] is not None:
+            updates["tiempo_preparacion"] = max(1, int(payload["tiempo_preparacion"]))
+        if "descripcion" in payload:
+            updates["descripcion"] = (payload["descripcion"] or "").strip()
+        if "destacado" in payload and payload["destacado"] is not None:
+            updates["destacado"] = bool(payload["destacado"])
+
+        if not updates:
+            raise HTTPException(status_code=400, detail="No se enviaron campos para actualizar.")
+
+        resultado = await db.producto.update_one(filtro, {"$set": updates})
+        if resultado.matched_count == 0:
+            raise HTTPException(status_code=404, detail="Producto no encontrado")
+
+        # Asegurar registro de nueva categoría o etiquetas en la configuración maestra
+        if "categoria" in updates or "etiquetas" in updates:
+            cfg = await ensure_carta_config(db)
+            cats = list(cfg.get("categorias") or [])
+            tags = list(cfg.get("etiquetas") or [])
+            if "categoria" in updates and updates["categoria"] not in cats:
+                cats.append(updates["categoria"])
+            for t in updates.get("etiquetas") or []:
+                if t not in tags:
+                    tags.append(t)
+            await db.carta_config.update_one(
+                {"_id": "filtros"},
+                {"$set": {"categorias": cats, "etiquetas": tags}},
+                upsert=True,
+            )
+
+        registrar_log(
+            sqlite_db,
+            staff,
+            staff.rol,
+            "Plato actualizado",
+            f"Plato {updates.get('nombre', id_producto)} editado",
+        )
+        return {"mensaje": "Producto actualizado correctamente", "updates": serializar_doc(updates)}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=repr(e))
+
+
 @app.put("/productos/{id_producto}/precio", tags=["3. UPDATE (2)"])
 async def update_precio_producto(
     id_producto: str,
@@ -1382,7 +1688,7 @@ async def llamar_garzon(visita_id: str, datos: LlamarGarzonInput, db=Depends(get
     try:
         solicitud_payload = {
             "activa": True,
-            "hora_solicitud": datetime.utcnow().isoformat(),
+            "hora_solicitud": now_chile_dt().isoformat(),
             "motivo": datos.motivo,
         }
 
@@ -1408,7 +1714,7 @@ async def llamar_garzon(visita_id: str, datos: LlamarGarzonInput, db=Depends(get
 
                 nueva_visita = {
                     "num_mesa": num_m,
-                    "hora_inicio": datetime.utcnow().isoformat(),
+                    "hora_inicio": now_chile_dt().isoformat(),
                     "estado_visita": "Activa",
                     "solicitud_garzon": solicitud_payload,
                     "pagos": [],
@@ -1441,7 +1747,7 @@ async def atender_garzon(
 ):
     """Desactiva cualquier solicitud de garzón activa para la visita o mesa indicada."""
     try:
-        ahora_iso = datetime.utcnow().isoformat()
+        ahora_iso = now_chile_dt().isoformat()
         update_payload = {
             "$set": {
                 "solicitud_garzon.activa": False,
@@ -1626,86 +1932,302 @@ async def drop_coleccion_promociones(
 
 
 # ==============================================================================
-# REINICIO Y LIMPIEZA DE PRUEBAS (Cocinero / Administrador)
+# ADMINISTRADOR — Pedidos, Transacciones, Comprobantes, Categorías y Etiquetas
 # ==============================================================================
-@app.post("/sistema/reiniciar-pruebas", tags=["Pruebas"])
-@app.post("/mesas/reiniciar-pruebas", tags=["Pruebas"])
-async def reiniciar_sistema_pruebas(
-    staff: Usuario = Depends(require_roles("Cocinero", "Administrador")),
+@app.get("/admin/pedidos-transacciones", tags=["Admin - Transacciones"])
+async def obtener_pedidos_y_transacciones(
+    sucursal: Optional[str] = None,
+    _admin: Usuario = Depends(require_roles("Administrador")),
     db=Depends(get_db),
-    sqlite_db: Session = Depends(get_sqlite_db),
 ):
+    """
+    Panel ejecutivo del Administrador: retorna transacciones pagadas (foco principal),
+    pedidos activos e históricos, y métricas consolidadas (con soporte multi-local).
+    """
     try:
-        await db.pedidos.update_many(
-            {"estado_pedido": {"$nin": ["Archivado", "Entregado"]}},
-            {"$set": {"estado_pedido": "Archivado"}},
-        )
+        tx_query = {"sucursal": sucursal} if sucursal and sucursal != "todas" else {}
+        ped_query = {"estado_pedido": {"$ne": "Archivado"}}
+        if sucursal and sucursal != "todas":
+            ped_query["sucursal"] = sucursal
 
-        mesas_count = await db.mesas.count_documents({})
-        cant_mesas = max(2, mesas_count)
-        for num in range(1, cant_mesas + 1):
-            await db.mesas.update_one(
-                {"$or": [{"num_mesa": num}, {"num_mesa": str(num)}]},
-                {"$set": {"num_mesa": num, "estado": "Libre", "visita_activa_id": None}},
-                upsert=True,
-            )
+        transacciones = await db.transacciones.find(tx_query).sort("_id", -1).to_list(length=300)
+        pedidos = await db.pedidos.find(ped_query).sort("_id", -1).to_list(length=300)
 
-        hora_test = datetime.now().strftime("%H:%M")
-        pedido_mesa_2 = {
-            "num_mesa": 2,
-            "empleado_id": None,
-            "estado_pedido": "Pendiente",
-            "hora_pedido": hora_test,
-            "notas": "Mesa de prueba: esperando a elaboración",
-            "items": [
-                {
-                    "producto_id": "1",
-                    "nombre": "Plato Principal Alpha",
-                    "precio_unitario": 12500,
-                    "cantidad": 1,
-                    "observaciones": "Término medio",
-                },
-                {
-                    "producto_id": "2",
-                    "nombre": "Entrada Especial Beta",
-                    "precio_unitario": 8000,
-                    "cantidad": 1,
-                    "observaciones": "Sin sal añadida",
-                },
-            ],
-            "subtotal": 20500,
-            "total": 20500,
-            "fecha_creacion": datetime.now(),
-        }
-        res_pedido_2 = await db.pedidos.insert_one(pedido_mesa_2)
+        total_ingresos = sum(float(t.get("total_pagado") or 0) for t in transacciones)
+        total_propinas = sum(float(t.get("propina_monto") or 0) for t in transacciones)
+        cant_tx = len(transacciones)
+        ticket_promedio = round(total_ingresos / cant_tx) if cant_tx > 0 else 0
+        comprobantes_enviados = sum(1 for t in transacciones if t.get("comprobante_enviado"))
+        comprobantes_registrados = sum(1 for t in transacciones if t.get("correo_cliente"))
 
-        await db.mesas.update_one(
-            {"$or": [{"num_mesa": 2}, {"num_mesa": "2"}]},
-            {"$set": {"num_mesa": 2, "estado": "Pendiente", "visita_activa_id": None}},
-            upsert=True,
-        )
+        por_metodo = {"tarjeta": 0, "efectivo": 0, "transferencia": 0}
+        monto_por_metodo = {"tarjeta": 0.0, "efectivo": 0.0, "transferencia": 0.0}
+        for t in transacciones:
+            m = str(t.get("metodo_pago") or "tarjeta").lower()
+            if m not in por_metodo:
+                m = "tarjeta"
+            por_metodo[m] += 1
+            monto_por_metodo[m] += float(t.get("total_pagado") or 0)
 
-        await db.mesas.update_one(
-            {"$or": [{"num_mesa": 1}, {"num_mesa": "1"}]},
-            {"$set": {"num_mesa": 1, "estado": "Libre", "visita_activa_id": None}},
-            upsert=True,
-        )
+        sucursales_set = {"Local 1 - Casa Matriz"}
+        for t in transacciones:
+            if t.get("sucursal"):
+                sucursales_set.add(t["sucursal"])
+        for p in pedidos:
+            if p.get("sucursal"):
+                sucursales_set.add(p["sucursal"])
 
-        prods = await db.producto.find({}).to_list(100)
-        for p in prods:
-            img_res = resolver_imagen_producto(p)
-            if not p.get("imagen") or p.get("imagen") != img_res:
-                await db.producto.update_one({"_id": p["_id"]}, {"$set": {"imagen": img_res}})
-
-        registrar_log(sqlite_db, staff, staff.rol, "Reinicio de pruebas", "Mesa 1 libre / Mesa 2 en espera")
         return {
-            "mensaje": "Estado de pruebas reiniciado con éxito",
-            "mesa_1": "Libre (lista para tiempo real)",
-            "mesa_2": "Esperando a elaboración (comanda activa)",
-            "pedido_mesa_2_id": str(res_pedido_2.inserted_id),
+            "resumen": {
+                "total_ingresos": total_ingresos,
+                "total_propinas": total_propinas,
+                "cantidad_transacciones": cant_tx,
+                "ticket_promedio": ticket_promedio,
+                "comprobantes_enviados": comprobantes_enviados,
+                "comprobantes_registrados": comprobantes_registrados,
+                "por_metodo": por_metodo,
+                "monto_por_metodo": monto_por_metodo,
+                "sucursales": sorted(sucursales_set),
+            },
+            "transacciones": [serializar_doc(t) for t in transacciones],
+            "pedidos": [serializar_doc(p) for p in pedidos],
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=repr(e))
+
+
+@app.post("/admin/transacciones/{transaccion_id}/reenviar-comprobante", tags=["Admin - Transacciones"])
+async def reenviar_comprobante_transaccion(
+    transaccion_id: str,
+    admin: Usuario = Depends(require_roles("Administrador")),
+    db=Depends(get_db),
+    sqlite_db: Session = Depends(get_sqlite_db),
+):
+    """Reintenta el envío del comprobante electrónico por correo para una transacción."""
+    try:
+        filtro = {"_id": ObjectId(transaccion_id)} if ObjectId.is_valid(transaccion_id) else {"_id": transaccion_id}
+        tx = await db.transacciones.find_one(filtro)
+        if not tx:
+            raise HTTPException(status_code=404, detail="Transacción no encontrada")
+
+        correo = (tx.get("correo_cliente") or "").strip()
+        if not correo:
+            raise HTTPException(status_code=400, detail="La transacción no tiene correo asociado")
+
+        email_result = await send_receipt_email(correo, tx)
+        await db.transacciones.update_one(
+            {"_id": tx["_id"]},
+            {
+                "$set": {
+                    "comprobante_enviado": bool(email_result.get("sent")),
+                    "estado_envio_correo": email_result.get("status", "registrado"),
+                    "detalle_envio_correo": email_result.get("detail", ""),
+                }
+            },
+        )
+        registrar_log(
+            sqlite_db,
+            admin,
+            "Administrador",
+            "Reenvío de comprobante",
+            f"Comprobante {tx.get('comprobante_codigo')} -> {correo} ({email_result.get('status')})",
+        )
+        return {
+            "mensaje": email_result.get("detail"),
+            "comprobante_enviado": bool(email_result.get("sent")),
+            "estado_envio_correo": email_result.get("status"),
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=repr(e))
+
+
+@app.post("/admin/filtros/categorias", tags=["Admin - Catálogo y Filtros"])
+async def agregar_categoria_catalogo(
+    data: CategoriaInput,
+    admin: Usuario = Depends(require_roles("Administrador")),
+    db=Depends(get_db),
+    sqlite_db: Session = Depends(get_sqlite_db),
+):
+    nombre = normalize_category_name(data.nombre)
+    if not nombre:
+        raise HTTPException(status_code=400, detail="El nombre de la categoría es obligatorio")
+
+    cfg = await ensure_carta_config(db)
+    cats = list(cfg.get("categorias") or [])
+    if not any(c.lower() == nombre.lower() for c in cats):
+        cats.append(nombre)
+        await db.carta_config.update_one({"_id": "filtros"}, {"$set": {"categorias": cats}}, upsert=True)
+        registrar_log(sqlite_db, admin, "Administrador", "Categoría creada", nombre)
+    return {"mensaje": f"Categoría '{nombre}' disponible", "categorias": cats}
+
+
+@app.put("/admin/filtros/categorias", tags=["Admin - Catálogo y Filtros"])
+async def renombrar_categoria_catalogo(
+    data: CategoriaRenameInput,
+    admin: Usuario = Depends(require_roles("Administrador")),
+    db=Depends(get_db),
+    sqlite_db: Session = Depends(get_sqlite_db),
+):
+    actual = (data.nombre_actual or "").strip()
+    nuevo = normalize_category_name(data.nombre_nuevo)
+    if not actual or not nuevo:
+        raise HTTPException(status_code=400, detail="Debes indicar el nombre actual y el nuevo")
+
+    cfg = await ensure_carta_config(db)
+    cats = [nuevo if c.lower() == actual.lower() else c for c in (cfg.get("categorias") or [])]
+    if not any(c.lower() == nuevo.lower() for c in cats):
+        cats.append(nuevo)
+    # Deduplicar preservando orden
+    cats_dedup = list(dict.fromkeys(cats))
+    await db.carta_config.update_one({"_id": "filtros"}, {"$set": {"categorias": cats_dedup}}, upsert=True)
+
+    res = await db.producto.update_many(
+        {"categoria": {"$regex": f"^{re.escape(actual)}$", "$options": "i"}},
+        {"$set": {"categoria": nuevo}},
+    )
+    registrar_log(
+        sqlite_db,
+        admin,
+        "Administrador",
+        "Categoría renombrada",
+        f"{actual} -> {nuevo} ({res.modified_count} platos)",
+    )
+    return {"mensaje": f"Categoría '{actual}' actualizada a '{nuevo}'", "platos_actualizados": res.modified_count}
+
+
+@app.delete("/admin/filtros/categorias/{nombre}", tags=["Admin - Catálogo y Filtros"])
+async def eliminar_categoria_catalogo(
+    nombre: str,
+    reassign_to: Optional[str] = "Platos de Fondo",
+    admin: Usuario = Depends(require_roles("Administrador")),
+    db=Depends(get_db),
+    sqlite_db: Session = Depends(get_sqlite_db),
+):
+    target = (nombre or "").strip()
+    if not target:
+        raise HTTPException(status_code=400, detail="Categoría inválida")
+
+    cfg = await ensure_carta_config(db)
+    cats = [c for c in (cfg.get("categorias") or []) if c.lower() != target.lower()]
+    destino = normalize_category_name(reassign_to)
+    if destino.lower() != target.lower() and destino not in cats:
+        cats.append(destino)
+
+    await db.carta_config.update_one({"_id": "filtros"}, {"$set": {"categorias": cats}}, upsert=True)
+    res = await db.producto.update_many(
+        {"categoria": {"$regex": f"^{re.escape(target)}$", "$options": "i"}},
+        {"$set": {"categoria": destino}},
+    )
+    registrar_log(
+        sqlite_db,
+        admin,
+        "Administrador",
+        "Categoría eliminada",
+        f"{target} (platos reasignados a {destino}: {res.modified_count})",
+    )
+    return {"mensaje": f"Categoría '{target}' eliminada", "platos_reasignados": res.modified_count}
+
+
+@app.post("/admin/filtros/etiquetas", tags=["Admin - Catálogo y Filtros"])
+async def agregar_etiqueta_catalogo(
+    data: EtiquetaInput,
+    admin: Usuario = Depends(require_roles("Administrador")),
+    db=Depends(get_db),
+    sqlite_db: Session = Depends(get_sqlite_db),
+):
+    nombre = (data.nombre or "").strip()
+    if not nombre:
+        raise HTTPException(status_code=400, detail="El nombre de la etiqueta es obligatorio")
+
+    cfg = await ensure_carta_config(db)
+    tags = list(cfg.get("etiquetas") or [])
+    if not any(t.lower() == nombre.lower() for t in tags):
+        tags.append(nombre)
+        await db.carta_config.update_one({"_id": "filtros"}, {"$set": {"etiquetas": tags}}, upsert=True)
+        registrar_log(sqlite_db, admin, "Administrador", "Etiqueta creada", nombre)
+    return {"mensaje": f"Etiqueta '{nombre}' disponible", "etiquetas": tags}
+
+
+@app.put("/admin/filtros/etiquetas", tags=["Admin - Catálogo y Filtros"])
+async def renombrar_etiqueta_catalogo(
+    data: EtiquetaRenameInput,
+    admin: Usuario = Depends(require_roles("Administrador")),
+    db=Depends(get_db),
+    sqlite_db: Session = Depends(get_sqlite_db),
+):
+    actual = (data.nombre_actual or "").strip()
+    nuevo = (data.nombre_nuevo or "").strip()
+    if not actual or not nuevo:
+        raise HTTPException(status_code=400, detail="Debes indicar el nombre actual y el nuevo")
+
+    cfg = await ensure_carta_config(db)
+    tags = [nuevo if t.lower() == actual.lower() else t for t in (cfg.get("etiquetas") or [])]
+    if not any(t.lower() == nuevo.lower() for t in tags):
+        tags.append(nuevo)
+    tags_dedup = list(dict.fromkeys(tags))
+    await db.carta_config.update_one({"_id": "filtros"}, {"$set": {"etiquetas": tags_dedup}}, upsert=True)
+
+    prods = await db.producto.find({}).to_list(length=500)
+    modificados = 0
+    for p in prods:
+        curr_tags = p.get("etiquetas") or []
+        changed = False
+        next_tags = []
+        for t in curr_tags:
+            if str(t).strip().lower() == actual.lower():
+                changed = True
+                if nuevo not in next_tags:
+                    next_tags.append(nuevo)
+            elif str(t).strip() and str(t).strip() not in next_tags:
+                next_tags.append(str(t).strip())
+        if changed:
+            await db.producto.update_one({"_id": p["_id"]}, {"$set": {"etiquetas": next_tags}})
+            modificados += 1
+
+    registrar_log(
+        sqlite_db,
+        admin,
+        "Administrador",
+        "Etiqueta renombrada",
+        f"{actual} -> {nuevo} ({modificados} platos)",
+    )
+    return {"mensaje": f"Etiqueta '{actual}' actualizada a '{nuevo}'", "platos_actualizados": modificados}
+
+
+@app.delete("/admin/filtros/etiquetas/{nombre}", tags=["Admin - Catálogo y Filtros"])
+async def eliminar_etiqueta_catalogo(
+    nombre: str,
+    admin: Usuario = Depends(require_roles("Administrador")),
+    db=Depends(get_db),
+    sqlite_db: Session = Depends(get_sqlite_db),
+):
+    target = (nombre or "").strip()
+    if not target:
+        raise HTTPException(status_code=400, detail="Etiqueta inválida")
+
+    cfg = await ensure_carta_config(db)
+    tags = [t for t in (cfg.get("etiquetas") or []) if t.lower() != target.lower()]
+    await db.carta_config.update_one({"_id": "filtros"}, {"$set": {"etiquetas": tags}}, upsert=True)
+
+    prods = await db.producto.find({}).to_list(length=500)
+    modificados = 0
+    for p in prods:
+        curr_tags = p.get("etiquetas") or []
+        next_tags = [t for t in curr_tags if str(t).strip().lower() != target.lower()]
+        if len(next_tags) != len(curr_tags):
+            await db.producto.update_one({"_id": p["_id"]}, {"$set": {"etiquetas": next_tags}})
+            modificados += 1
+
+    registrar_log(
+        sqlite_db,
+        admin,
+        "Administrador",
+        "Etiqueta eliminada",
+        f"{target} (removida de {modificados} platos)",
+    )
+    return {"mensaje": f"Etiqueta '{target}' eliminada", "platos_actualizados": modificados}
 
 
 # ==============================================================================

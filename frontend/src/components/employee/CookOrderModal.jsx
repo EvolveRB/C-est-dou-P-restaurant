@@ -151,15 +151,14 @@ export default function CookOrderModal({ table, mesa, onClose, onUpdateStatus })
                       }}
                     >
                       <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flex: 1 }}>
-                        {/* Vista Cocina: Renderizado condicional sin placeholders falsos */}
+                        {/* Vista Cocina: Renderizado condicional de imagen Azure o icono limpio */}
                         {itemImg ? (
                           <img
                             src={itemImg}
                             alt={name}
+                            loading="lazy"
                             onError={(e) => {
-                              if (itemImg.startsWith('/Imagenes/')) {
-                                e.currentTarget.src = itemImg.replace('/Imagenes/', '/');
-                              }
+                              e.currentTarget.style.display = 'none';
                             }}
                             style={{ width: '40px', height: '40px', borderRadius: '8px', objectFit: 'cover' }}
                           />

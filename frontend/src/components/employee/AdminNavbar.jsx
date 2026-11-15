@@ -1,6 +1,6 @@
 import { NavLink, Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
-import { ShieldCheck, QrCode, LogOut, User, Utensils } from 'lucide-react';
+import { ShieldCheck, QrCode, LogOut, User, Utensils, Receipt, BookOpen } from 'lucide-react';
 
 export default function AdminNavbar() {
   const { user, logout } = useAuth();
@@ -23,7 +23,23 @@ export default function AdminNavbar() {
           className={({ isActive }) => `staff-nav-item ${isActive ? 'active' : ''}`}
         >
           <ShieldCheck size={16} />
-          <span>Panel Admin</span>
+          <span>Personal</span>
+        </NavLink>
+
+        <NavLink
+          to="/admin/pedidos"
+          className={({ isActive }) => `staff-nav-item ${isActive ? 'active' : ''}`}
+        >
+          <Receipt size={16} />
+          <span>Pedidos y Transacciones</span>
+        </NavLink>
+
+        <NavLink
+          to="/admin/productos"
+          className={({ isActive }) => `staff-nav-item ${isActive ? 'active' : ''}`}
+        >
+          <BookOpen size={16} />
+          <span>Carta y Filtros</span>
         </NavLink>
 
         <NavLink

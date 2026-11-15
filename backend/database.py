@@ -13,20 +13,24 @@ if os.path.exists(_env_path):
 load_dotenv()
 
 # ==============================================================================
-# 1. MONGODB ATLAS — Catálogo, Mesas, Pedidos, Visitas y Promociones
+# 1. MONGODB ATLAS — Catálogo, Mesas, Pedidos, Visitas, Transacciones
 # ==============================================================================
-DEFAULT_MONGO_URI = "<REDACTED_MONGO_URI>"
-MONGO_URI = os.getenv("MONGO_URI") or DEFAULT_MONGO_URI
+MONGO_URI = (os.getenv("MONGO_URI") or "").strip()
 
-cliente_mongo = AsyncIOMotorClient(
-    MONGO_URI,
-    serverSelectionTimeoutMS=5000
+cliente_mongo = (
+    AsyncIOMotorClient(MONGO_URI, serverSelectionTimeoutMS=5000)
+    if MONGO_URI
+    else None
 )
-restaurante_db = cliente_mongo["restaurante_db"]
+restaurante_db = cliente_mongo["restaurante_db"] if cliente_mongo is not None else None
 
 
 async def get_db():
     """Inyecta la base de datos NoSQL (MongoDB Atlas) para operación del restaurante."""
+    if restaurante_db is None:
+        raise RuntimeError(
+            "MONGO_URI no está configurada. Define MONGO_URI en backend/.env o en las variables de entorno."
+        )
     return restaurante_db
 
 

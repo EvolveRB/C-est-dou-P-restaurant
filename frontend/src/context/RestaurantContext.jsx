@@ -1,77 +1,36 @@
 import { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { useLocation } from 'react-router-dom';
-import { INITIAL_PRODUCTS } from '../data/initialProducts';
+import { normalizeCategoryKey } from '../data/initialProducts';
 import { useAuth } from './AuthContext';
 import { roleLog } from '../utils/roleLogger';
 import { normalizeRut } from '../utils/rut';
 
 const API_URL = import.meta.env.VITE_API_URL ?? (import.meta.env.DEV ? 'http://localhost:8000' : '');
+const AZURE_IMAGES_BASE_URL = (import.meta.env.VITE_AZURE_IMAGES_BASE_URL || '').trim().replace(/\/+$/, '');
+const POLLING_INTERVAL_MS = 3000;
 
 const RestaurantContext = createContext(null);
 
-const IMAGE_FALLBACK_BY_NAME = {
-  'plato principal alpha': 'plato_alpha.jpg',
-  'entrada especial beta': 'entrada_beta.jpg',
-  'sopa tradicional gamma': 'sopa_gamma.jpg',
-  'corte de carne delta': 'corte_delta.jpg',
-  'pasta artesanal epsilon': 'pasta_epsilon.jpg',
-  'postre tentación zeta': 'postreUV.jpeg',
-  'postre tentacion zeta': 'postreUV.jpeg',
-  'carpaccio de res trufado': 'carpaccio_trufado.jpg',
-  'bisque de mariscos del puerto': 'bisque_mariscos.jpg',
-  'ravioles de ricotta y nueces': 'ravioles_ricotta.jpg',
-  'limonada menta jengibre': 'limonada_menta.jpg',
-  'copa de vino reserva syrah': 'vino_reserva.jpg',
-};
-
-const IMAGE_FALLBACK_BY_ID = {
-  1: 'plato_alpha.jpg',
-  2: 'entrada_beta.jpg',
-  3: 'sopa_gamma.jpg',
-  4: 'corte_delta.jpg',
-  5: 'pasta_epsilon.jpg',
-  6: 'postreUV.jpeg',
-  7: 'carpaccio_trufado.jpg',
-  8: 'bisque_mariscos.jpg',
-  9: 'ravioles_ricotta.jpg',
-  10: 'limonada_menta.jpg',
-  11: 'vino_reserva.jpg',
-};
-
 function formatImageUrl(img) {
-  if (!img) return '/Imagenes/plato_alpha.jpg';
-  if (img.startsWith('http://') || img.startsWith('https://') || img.startsWith('data:')) {
-    return img;
+  if (!img || typeof img !== 'string') return '';
+  const trimmed = img.trim();
+  if (!trimmed) return '';
+  if (trimmed.startsWith('http://') || trimmed.startsWith('https://') || trimmed.startsWith('data:')) {
+    return trimmed;
   }
-  const cleanPath = String(img).replace(/^[/\\]+/, '').replace(/^Imagenes[/\\]+/i, '');
-  return `/Imagenes/${cleanPath}`;
+  const cleanName = trimmed.replace(/^[/\\]+/, '').replace(/^Imagenes[/\\]+/i, '');
+  if (AZURE_IMAGES_BASE_URL && cleanName) {
+    return `${AZURE_IMAGES_BASE_URL}/${cleanName}`;
+  }
+  return '';
 }
 
 function resolveProductImage(p) {
-  if (!p) return '/Imagenes/plato_alpha.jpg';
+  if (!p) return '';
   if (p.imagen && typeof p.imagen === 'string' && p.imagen.trim()) {
     return formatImageUrl(p.imagen);
   }
-  const nameNorm = (p.nombre || '').toLowerCase().trim();
-  if (IMAGE_FALLBACK_BY_NAME[nameNorm]) {
-    return formatImageUrl(IMAGE_FALLBACK_BY_NAME[nameNorm]);
-  }
-  for (const [k, v] of Object.entries(IMAGE_FALLBACK_BY_NAME)) {
-    if (nameNorm.includes(k) || k.includes(nameNorm)) {
-      return formatImageUrl(v);
-    }
-  }
-  const idNum = Number(p.id_plato || p.id);
-  if (IMAGE_FALLBACK_BY_ID[idNum]) {
-    return formatImageUrl(IMAGE_FALLBACK_BY_ID[idNum]);
-  }
-  const initMatch = INITIAL_PRODUCTS.find(
-    (ip) => ip.id === idNum || ip.nombre.toLowerCase() === nameNorm
-  );
-  if (initMatch?.imagen) {
-    return formatImageUrl(initMatch.imagen);
-  }
-  return '/Imagenes/plato_alpha.jpg';
+  return '';
 }
 
 function mapEstadoBackendToUI(estadoBackend) {
@@ -103,11 +62,7 @@ function normalizeOrderItems(rawItems) {
     const qty = Math.max(1, parseInt(it.quantity ?? it.cantidad ?? 1, 10));
     const note = it.note || it.observaciones || it.notas || '';
     const rawImg = it.product?.imagen || it.imagen;
-    const imgResolved = resolveProductImage({
-      nombre: prodName,
-      id_plato: prodId,
-      imagen: rawImg,
-    });
+    const imgResolved = formatImageUrl(rawImg);
     return {
       product: {
         id: prodId,
@@ -168,6 +123,7 @@ function normalizeMesas(pedidosBackend, totalMesas = 8, strictTotal = false) {
         total: pedido.total || pedido.subtotal || totalCalculado,
         subtotal: pedido.subtotal || pedido.total || totalCalculado,
         notas: pedido.notas || '',
+        sucursal: pedido.sucursal || 'Local 1 - Casa Matriz',
       },
     };
   });
@@ -188,16 +144,21 @@ function isProductAvailable(p) {
 }
 
 function normalizeProducto(p) {
+  const rawCategory = (p.categoria ?? 'Platos de Fondo').trim();
+  const displayCategory = rawCategory.toLowerCase() === 'postre' ? 'Postres' : rawCategory;
   return {
     id: p._id ?? p.id_plato ?? p.id,
     nombre: p.nombre,
-    categoria: (p.categoria ?? 'otros').toLowerCase(),
+    categoria: normalizeCategoryKey(displayCategory),
+    categoriaNombre: displayCategory,
     precio: Number(p.precio ?? 0),
     descripcion: p.descripcion ?? '',
-    tiempo: p.tiempo_preparacion ?? p.tiempo ?? 0,
+    tiempo: p.tiempo_preparacion ?? p.tiempo ?? 15,
     disponible: isProductAvailable(p),
+    disponibilidad: p.disponibilidad ?? (isProductAvailable(p) ? 'En stock' : 'Agotado'),
     imagen: resolveProductImage(p),
-    destacado: p.destacado ?? false,
+    imagenRaw: p.imagen ?? '',
+    destacado: Boolean(p.destacado),
     etiquetas: Array.isArray(p.etiquetas) ? p.etiquetas : [],
   };
 }
@@ -222,14 +183,31 @@ export function RestaurantProvider({ children }) {
   const [tables, setTables] = useState(() =>
     Array.from({ length: 8 }, (_, i) => ({ id: i + 1, estado: 'Libre', pedido: null }))
   );
-  const [products, setProducts] = useState(() => INITIAL_PRODUCTS.map(normalizeProducto));
+  const [products, setProducts] = useState([]);
+  const [catalogFilters, setCatalogFilters] = useState({ categorias: [], etiquetas: [] });
   const [employees, setEmployees] = useState([]);
-  const [llamadasGarzon, setLlamadasGarzon] = useState({});
   const [roleLogs, setRoleLogs] = useState([]);
+  const [llamadasGarzon, setLlamadasGarzon] = useState({});
+  const [adminPedidosData, setAdminPedidosData] = useState({
+    resumen: {
+      total_ingresos: 0,
+      total_propinas: 0,
+      cantidad_transacciones: 0,
+      ticket_promedio: 0,
+      comprobantes_enviados: 0,
+      comprobantes_registrados: 0,
+      por_metodo: { tarjeta: 0, efectivo: 0, transferencia: 0 },
+      monto_por_metodo: { tarjeta: 0, efectivo: 0, transferencia: 0 },
+      sucursales: ['Local 1 - Casa Matriz'],
+    },
+    transacciones: [],
+    pedidos: [],
+  });
 
   const [loadingTables, setLoadingTables] = useState(false);
   const [loadingProducts, setLoadingProducts] = useState(false);
   const [loadingEmployees, setLoadingEmployees] = useState(false);
+  const [loadingAdminPedidos, setLoadingAdminPedidos] = useState(false);
 
   const fetchRoleLogs = useCallback(async () => {
     if (!activeStaffRole) return;
@@ -267,6 +245,27 @@ export function RestaurantProvider({ children }) {
     }
   }, [activeStaffRole]);
 
+  const fetchAdminOrdersAndTransactions = useCallback(async (sucursal = 'todas') => {
+    if (activeStaffRole !== 'Administrador') return;
+    setLoadingAdminPedidos(true);
+    try {
+      const q = sucursal && sucursal !== 'todas' ? `?sucursal=${encodeURIComponent(sucursal)}` : '';
+      const res = await fetch(`${API_URL}/admin/pedidos-transacciones${q}`, {
+        credentials: 'include',
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data && typeof data === 'object') {
+          setAdminPedidosData(data);
+        }
+      }
+    } catch (err) {
+      roleLog('Administrador', 'warn', `Error cargando transacciones: ${err.message}`);
+    } finally {
+      setLoadingAdminPedidos(false);
+    }
+  }, [activeStaffRole]);
+
   const fetchTables = useCallback(async () => {
     if (!activeStaffRole) return;
     const seq = ++fetchSeqRef.current;
@@ -278,7 +277,6 @@ export function RestaurantProvider({ children }) {
         fetch(`${API_URL}/pedidos/info-mesas`, { credentials: 'include' }),
       ]);
 
-      // Ignorar respuestas obsoletas que llegaron fuera de orden
       if (seq !== fetchSeqRef.current) return;
 
       let effectiveCount = tableCountRef.current;
@@ -339,12 +337,23 @@ export function RestaurantProvider({ children }) {
       const res = await fetch(`${API_URL}/pedidos/mesa/${numMesa}`);
       if (!res.ok) return;
       const pedido = await res.json();
-      setTables((prev) => {
-        const nextList = normalizeMesas(pedido ? [pedido] : [], Math.max(numMesa, prev.length || 8));
-        return nextList;
-      });
+      setTables((prev) => normalizeMesas(pedido ? [pedido] : [], Math.max(numMesa, prev.length || 8)));
     } catch (err) {
       roleLog('Cliente', 'warn', `Error consultando estado de mesa ${numMesa}: ${err.message}`);
+    }
+  }, []);
+
+  const fetchCatalogFilters = useCallback(async () => {
+    try {
+      const res = await fetch(`${API_URL}/catalogo/filtros`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data && Array.isArray(data.categorias) && Array.isArray(data.etiquetas)) {
+          setCatalogFilters(data);
+        }
+      }
+    } catch {
+      // Silencioso si no hay conexión
     }
   }, []);
 
@@ -354,10 +363,13 @@ export function RestaurantProvider({ children }) {
     }
     setLoadingProducts(true);
     try {
-      const res = await fetch(`${API_URL}/productos/filtrados?precio_maximo=9999999`);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json();
-      if (Array.isArray(data) && data.length > 0) {
+      const [prodRes] = await Promise.all([
+        fetch(`${API_URL}/productos/filtrados`),
+        fetchCatalogFilters(),
+      ]);
+      if (!prodRes.ok) throw new Error(`HTTP ${prodRes.status}`);
+      const data = await prodRes.json();
+      if (Array.isArray(data)) {
         setProducts(data.map(normalizeProducto));
       }
     } catch (err) {
@@ -365,10 +377,9 @@ export function RestaurantProvider({ children }) {
     } finally {
       setLoadingProducts(false);
     }
-  }, [isClientRoute, activeStaffRole]);
+  }, [isClientRoute, activeStaffRole, fetchCatalogFilters]);
 
-  // Carga estrictamente separada por perfil y ruta:
-  // En login / setup / cambio obligatorio de contraseña NO ejecuta ninguna petición.
+  // Carga separada por perfil y ruta con polling unificado de 3 segundos (3000 ms)
   useEffect(() => {
     if (isClientRoute) {
       const initTimer = setTimeout(() => {
@@ -377,7 +388,7 @@ export function RestaurantProvider({ children }) {
       }, 0);
       const clientInterval = setInterval(() => {
         fetchClientTableOrder(clientMesaNum);
-      }, 3000);
+      }, POLLING_INTERVAL_MS);
       return () => {
         clearTimeout(initTimer);
         clearInterval(clientInterval);
@@ -399,6 +410,8 @@ export function RestaurantProvider({ children }) {
 
       if (activeStaffRole === 'Administrador') {
         fetchEmployees();
+        fetchProducts();
+        fetchAdminOrdersAndTransactions();
       } else {
         setEmployees([]);
       }
@@ -410,7 +423,10 @@ export function RestaurantProvider({ children }) {
 
     const staffInterval = setInterval(() => {
       fetchTables();
-    }, 2500);
+      if (activeStaffRole === 'Administrador') {
+        fetchAdminOrdersAndTransactions();
+      }
+    }, POLLING_INTERVAL_MS);
 
     return () => {
       clearTimeout(staffTimer);
@@ -425,6 +441,7 @@ export function RestaurantProvider({ children }) {
     fetchEmployees,
     fetchRoleLogs,
     fetchClientTableOrder,
+    fetchAdminOrdersAndTransactions,
   ]);
 
   const addEmployee = async (newEmp) => {
@@ -539,6 +556,46 @@ export function RestaurantProvider({ children }) {
     }
   };
 
+  const pagarMesa = async (tableNumber, { correoCliente, metodoPago, propinaPorcentaje }) => {
+    const num = parseInt(tableNumber, 10);
+    const res = await fetch(`${API_URL}/mesas/${num}/pagar`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        correo_cliente: correoCliente,
+        metodo_pago: metodoPago,
+        propina_porcentaje: propinaPorcentaje,
+      }),
+    });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(body?.detail || `No se pudo procesar el pago (HTTP ${res.status})`);
+    }
+    setTables((prev) =>
+      prev.map((t) => (t.id === num ? { ...t, estado: 'Libre', pedido: null } : t))
+    );
+    await fetchClientTableOrder(num);
+    return body;
+  };
+
+  const resendTransactionReceipt = async (transaccionId) => {
+    try {
+      const res = await fetch(`${API_URL}/admin/transacciones/${transaccionId}/reenviar-comprobante`, {
+        method: 'POST',
+        credentials: 'include',
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        return { success: false, error: body?.detail || 'No se pudo reenviar el comprobante.' };
+      }
+      await fetchAdminOrdersAndTransactions();
+      await fetchRoleLogs();
+      return { success: true, ...body };
+    } catch {
+      return { success: false, error: 'Error de red al reenviar comprobante.' };
+    }
+  };
+
   const submitOrderForTable = async (tableNumber, cartItems, customerNotes = '') => {
     const num_mesa = parseInt(tableNumber, 10);
     const now = new Date();
@@ -617,21 +674,6 @@ export function RestaurantProvider({ children }) {
     return newOrder;
   };
 
-  const reiniciarEstadoPruebas = async () => {
-    try {
-      const res = await fetch(`${API_URL}/sistema/reiniciar-pruebas`, {
-        method: 'POST',
-        credentials: 'include',
-      });
-      await fetchTables();
-      await fetchProducts();
-      await fetchRoleLogs();
-      return res.ok;
-    } catch {
-      return false;
-    }
-  };
-
   const updateTableStatus = async (tableId, newStatus) => {
     const estadoBackend = mapEstadoUIToBackend(newStatus);
 
@@ -685,12 +727,171 @@ export function RestaurantProvider({ children }) {
         );
       } else {
         await fetchRoleLogs();
-        roleLog(activeStaffRole, 'info', `Disponibilidad plato actualizada`);
+        roleLog(activeStaffRole, 'info', 'Disponibilidad plato actualizada');
       }
     } catch {
       setProducts((prev) =>
         prev.map((p) => (p.id === productId ? { ...p, disponible: !p.disponible } : p))
       );
+    }
+  };
+
+  const createProduct = async (productData) => {
+    try {
+      const res = await fetch(`${API_URL}/productos`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify(productData),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) return { success: false, error: body?.detail || 'No se pudo crear el plato.' };
+      await fetchProducts();
+      await fetchRoleLogs();
+      return { success: true, id: body.id };
+    } catch {
+      return { success: false, error: 'Error de red al crear el plato.' };
+    }
+  };
+
+  const updateProduct = async (productId, productData) => {
+    try {
+      const res = await fetch(`${API_URL}/productos/${productId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify(productData),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) return { success: false, error: body?.detail || 'No se pudo actualizar el plato.' };
+      await fetchProducts();
+      await fetchRoleLogs();
+      return { success: true };
+    } catch {
+      return { success: false, error: 'Error de red al actualizar el plato.' };
+    }
+  };
+
+  const deleteProduct = async (productId) => {
+    try {
+      const res = await fetch(`${API_URL}/productos/${productId}`, {
+        method: 'DELETE',
+        credentials: 'include',
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) return { success: false, error: body?.detail || 'No se pudo eliminar el plato.' };
+      await fetchProducts();
+      await fetchRoleLogs();
+      return { success: true };
+    } catch {
+      return { success: false, error: 'Error de red al eliminar el plato.' };
+    }
+  };
+
+  const createCategory = async (nombre) => {
+    try {
+      const res = await fetch(`${API_URL}/admin/filtros/categorias`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ nombre }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) return { success: false, error: body?.detail || 'No se pudo crear la categoría.' };
+      await fetchProducts();
+      await fetchRoleLogs();
+      return { success: true };
+    } catch {
+      return { success: false, error: 'Error de conexión.' };
+    }
+  };
+
+  const renameCategory = async (nombreActual, nombreNuevo) => {
+    try {
+      const res = await fetch(`${API_URL}/admin/filtros/categorias`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ nombre_actual: nombreActual, nombre_nuevo: nombreNuevo }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) return { success: false, error: body?.detail || 'No se pudo renombrar la categoría.' };
+      await fetchProducts();
+      await fetchRoleLogs();
+      return { success: true };
+    } catch {
+      return { success: false, error: 'Error de conexión.' };
+    }
+  };
+
+  const deleteCategory = async (nombre, reassignTo = 'Platos de Fondo') => {
+    try {
+      const res = await fetch(
+        `${API_URL}/admin/filtros/categorias/${encodeURIComponent(nombre)}?reassign_to=${encodeURIComponent(reassignTo)}`,
+        {
+          method: 'DELETE',
+          credentials: 'include',
+        }
+      );
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) return { success: false, error: body?.detail || 'No se pudo eliminar la categoría.' };
+      await fetchProducts();
+      await fetchRoleLogs();
+      return { success: true };
+    } catch {
+      return { success: false, error: 'Error de conexión.' };
+    }
+  };
+
+  const createTag = async (nombre) => {
+    try {
+      const res = await fetch(`${API_URL}/admin/filtros/etiquetas`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ nombre }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) return { success: false, error: body?.detail || 'No se pudo crear la etiqueta.' };
+      await fetchProducts();
+      await fetchRoleLogs();
+      return { success: true };
+    } catch {
+      return { success: false, error: 'Error de conexión.' };
+    }
+  };
+
+  const renameTag = async (nombreActual, nombreNuevo) => {
+    try {
+      const res = await fetch(`${API_URL}/admin/filtros/etiquetas`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ nombre_actual: nombreActual, nombre_nuevo: nombreNuevo }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) return { success: false, error: body?.detail || 'No se pudo actualizar la etiqueta.' };
+      await fetchProducts();
+      await fetchRoleLogs();
+      return { success: true };
+    } catch {
+      return { success: false, error: 'Error de conexión.' };
+    }
+  };
+
+  const deleteTag = async (nombre) => {
+    try {
+      const res = await fetch(`${API_URL}/admin/filtros/etiquetas/${encodeURIComponent(nombre)}`, {
+        method: 'DELETE',
+        credentials: 'include',
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) return { success: false, error: body?.detail || 'No se pudo eliminar la etiqueta.' };
+      await fetchProducts();
+      await fetchRoleLogs();
+      return { success: true };
+    } catch {
+      return { success: false, error: 'Error de conexión.' };
     }
   };
 
@@ -800,6 +1001,7 @@ export function RestaurantProvider({ children }) {
         tableCount,
         setTableCount,
         products,
+        catalogFilters,
         employees,
         roleLogs,
         fetchRoleLogs,
@@ -809,9 +1011,23 @@ export function RestaurantProvider({ children }) {
         resetEmployeePassword,
         updateEmployeeRole,
         deleteEmployee,
+        adminPedidosData,
+        loadingAdminPedidos,
+        fetchAdminOrdersAndTransactions,
+        resendTransactionReceipt,
+        pagarMesa,
         submitOrderForTable,
         updateTableStatus,
         toggleProductAvailability,
+        createProduct,
+        updateProduct,
+        deleteProduct,
+        createCategory,
+        renameCategory,
+        deleteCategory,
+        createTag,
+        renameTag,
+        deleteTag,
         validarQrMesa,
         llamarGarzon,
         atenderLlamada,
@@ -819,7 +1035,6 @@ export function RestaurantProvider({ children }) {
         loadingTables,
         loadingProducts,
         resetTable,
-        reiniciarEstadoPruebas,
         refreshTables: fetchTables,
         refreshProducts: fetchProducts,
       }}

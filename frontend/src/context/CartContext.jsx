@@ -9,7 +9,7 @@ export function CartProvider({ children }) {
   const location = useLocation();
   const isClientRoute = /^\/(mesa|menu|cliente)(\/|$)/.test(location.pathname);
 
-  const { tables, submitOrderForTable, resetTable, llamarGarzon } = useRestaurant();
+  const { tables, submitOrderForTable, resetTable, pagarMesa, llamarGarzon } = useRestaurant();
 
   // Solo el navegador del comensal (cliente) usa localStorage para conservar su pedido
   const [tableNumber, setTableNumber] = useState(() => {
@@ -186,6 +186,27 @@ export function CartProvider({ children }) {
     showToast(`Mesa ${tableNumber} liberada y limpia`);
   };
 
+  const payAndCloseTable = async ({ correoCliente, metodoPago, propinaPorcentaje }) => {
+    if (!tableNumber) {
+      throw new Error('Número de mesa no identificado.');
+    }
+    const receipt = await pagarMesa(tableNumber, {
+      correoCliente,
+      metodoPago,
+      propinaPorcentaje,
+    });
+    clearCart();
+    setLastSubmittedOrder(null);
+    try {
+      localStorage.removeItem(`carrito_cest_dou_p_mesa_${tableNumber}`);
+      localStorage.removeItem('carrito_cest_dou_p');
+    } catch {
+      // Ignorar errores de almacenamiento
+    }
+    showToast(`✅ Pago confirmado y comprobante emitido (${receipt.comprobante_codigo})`);
+    return receipt;
+  };
+
   const sendOrder = async (customNotes = '') => {
     if (cart.length === 0) {
       showToast('⚠️ Carrito vacío: Agrega platos antes de enviar el pedido.');
@@ -266,6 +287,7 @@ export function CartProvider({ children }) {
         removeFromCart,
         clearCart,
         resetActiveTable,
+        payAndCloseTable,
         sendOrder,
         solicitarGarzon,
         callingWaiter,

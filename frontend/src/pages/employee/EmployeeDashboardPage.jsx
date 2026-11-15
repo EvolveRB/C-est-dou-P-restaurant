@@ -2,14 +2,13 @@ import { useState } from 'react';
 import { useRestaurant } from '../../context/RestaurantContext';
 import CookOrderModal from '../../components/employee/CookOrderModal';
 import RoleLogsPanel from '../../components/employee/RoleLogsPanel';
-import { EyeOff, Eye, Utensils, RotateCcw } from 'lucide-react';
+import { EyeOff, Eye, Utensils } from 'lucide-react';
 
 export default function EmployeeDashboardPage() {
-  const { tables, products, updateTableStatus, toggleProductAvailability, reiniciarEstadoPruebas } = useRestaurant();
+  const { tables, products, updateTableStatus, toggleProductAvailability } = useRestaurant();
   
   // Tab activa: 'pedidos' o 'inventario'
   const [activeTab, setActiveTab] = useState('pedidos');
-  const [resetting, setResetting] = useState(false);
   
   // Mesa seleccionada para abrir el popup
   const [selectedTable, setSelectedTable] = useState(null);
@@ -59,32 +58,6 @@ export default function EmployeeDashboardPage() {
             <h1 style={{ fontSize: '30px', fontWeight: 800, color: '#14171F', lineHeight: 1.15, margin: 0 }}>
               {activeTab === 'pedidos' ? 'Pedidos' : 'Inventario'}
             </h1>
-            <button
-              onClick={async () => {
-                setResetting(true);
-                await reiniciarEstadoPruebas();
-                setResetting(false);
-              }}
-              disabled={resetting}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '6px',
-                backgroundColor: '#FFFFFF',
-                border: '1.5px solid var(--c-terracotta)',
-                color: 'var(--c-terracotta)',
-                padding: '6px 14px',
-                borderRadius: '10px',
-                fontSize: '12.5px',
-                fontWeight: 700,
-                cursor: 'pointer',
-                transition: 'all 0.15s ease'
-              }}
-              title="Limpia mesas y prepara el entorno: Mesa 2 esperando a elaboración y Mesa 1 libre para pedidos en tiempo real"
-            >
-              <RotateCcw size={13} style={{ transform: resetting ? 'rotate(180deg)' : 'none', transition: 'transform 0.4s ease' }} />
-              <span>{resetting ? 'Reiniciando...' : 'Reiniciar Pruebas (Mesa 2 en espera / Mesa 1 libre)'}</span>
-            </button>
           </div>
 
           {/* Selector de pestañas unificado */}
@@ -423,12 +396,16 @@ export default function EmployeeDashboardPage() {
                           overflow: 'hidden',
                           marginBottom: '10px'
                         }}>
-                          <img
-                            src={prod.imagen}
-                            alt={prod.nombre}
-                            onError={(e) => { e.currentTarget.style.display = 'none'; }}
-                            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                          />
+                          {prod.imagen && (
+                            <img
+                              src={prod.imagen}
+                              alt={prod.nombre}
+                              loading="lazy"
+                              decoding="async"
+                              onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                              style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                            />
+                          )}
                         </div>
                       ) : (
                         <div style={{

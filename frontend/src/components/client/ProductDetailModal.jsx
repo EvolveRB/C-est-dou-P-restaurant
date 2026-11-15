@@ -4,12 +4,12 @@ import { formatPrice } from '../../data/initialProducts';
 import { useCart } from '../../context/CartContext';
 
 function formatDishUrl(src) {
-  if (!src) return '/plato_alpha.jpg';
-  if (src.startsWith('http://') || src.startsWith('https://') || src.startsWith('data:')) {
-    return src;
+  if (!src || typeof src !== 'string') return '';
+  const trimmed = src.trim();
+  if (trimmed.startsWith('http://') || trimmed.startsWith('https://') || trimmed.startsWith('data:')) {
+    return trimmed;
   }
-  const clean = src.replace(/^\/+/, '');
-  return `/${clean}`;
+  return '';
 }
 
 export default function ProductDetailModal({ product, onClose }) {
@@ -27,14 +27,7 @@ export default function ProductDetailModal({ product, onClose }) {
   }
 
   const handleImgError = () => {
-    if (currentSrc && !currentSrc.startsWith('/Imagenes/')) {
-      const clean = currentSrc.replace(/^\/+/, '');
-      setCurrentSrc(`/Imagenes/${clean}`);
-    } else if (currentSrc !== '/plato_alpha.jpg') {
-      setCurrentSrc('/plato_alpha.jpg');
-    } else {
-      setImgError(true);
-    }
+    setImgError(true);
   };
 
   if (!product) return null;

@@ -10,7 +10,9 @@ import {
   CheckCircle2,
   X,
   Banknote,
-  Smartphone
+  Smartphone,
+  Mail,
+  Loader2
 } from 'lucide-react';
 import { useCart } from '../../context/CartContext';
 import { formatPrice } from '../../data/initialProducts';
@@ -28,14 +30,18 @@ export default function ClientCartPage({ onGoToMenu, onOrderSuccess }) {
     solicitarGarzon,
     callingWaiter,
     activeOrder,
-    resetActiveTable
+    payAndCloseTable
   } = useCart();
 
   // Estados del modal de pago
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState('tarjeta'); // 'tarjeta', 'efectivo', 'transferencia'
   const [tipPercent, setTipPercent] = useState(10); // 0, 10, 15
+  const [customerEmail, setCustomerEmail] = useState('');
+  const [paymentError, setPaymentError] = useState('');
+  const [paying, setPaying] = useState(false);
   const [paymentConfirmed, setPaymentConfirmed] = useState(false);
+  const [receiptResult, setReceiptResult] = useState(null);
 
   // ¿Existe un pedido activo enviado a cocina?
   const hasKitchenOrder = Boolean(activeOrder && activeOrder.estado !== 'Libre' && Array.isArray(activeOrder.items) && activeOrder.items.length > 0);
@@ -48,7 +54,6 @@ export default function ClientCartPage({ onGoToMenu, onOrderSuccess }) {
 
   // Total acumulado de la mesa
   const tableTotal = kitchenTotal + newItemsTotal;
-  const totalItemCount = (hasKitchenOrder ? kitchenItems.reduce((acc, it) => acc + (it.quantity || it.cantidad || 1), 0) : 0) + totalItems;
 
   const handleSend = async () => {
     const order = await sendOrder();
@@ -61,24 +66,49 @@ export default function ClientCartPage({ onGoToMenu, onOrderSuccess }) {
     solicitarGarzon('Atención requerida en el pedido o cuenta');
   };
 
-  const tipAmount = Math.round((tableTotal * tipPercent) / 100);
-  const finalPaymentTotal = tableTotal + tipAmount;
+  const billableTotal = hasKitchenOrder ? kitchenTotal : tableTotal;
+  const tipAmount = Math.round((billableTotal * tipPercent) / 100);
+  const finalPaymentTotal = billableTotal + tipAmount;
 
-  const handleConfirmPayment = () => {
-    setPaymentConfirmed(true);
+  const handleConfirmPayment = async (e) => {
+    if (e && e.preventDefault) e.preventDefault();
+    setPaymentError('');
+    const trimmedEmail = customerEmail.trim().toLowerCase();
+    const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailPattern.test(trimmedEmail)) {
+      setPaymentError('Ingresa un correo electrónico válido para enviarte tu comprobante.');
+      return;
+    }
+
+    setPaying(true);
+    try {
+      const receipt = await payAndCloseTable({
+        correoCliente: trimmedEmail,
+        metodoPago: paymentMethod,
+        propinaPorcentaje: tipPercent,
+      });
+      setReceiptResult(receipt);
+      setPaymentConfirmed(true);
+    } catch (err) {
+      setPaymentError(err?.message || 'No se pudo procesar el pago. Intenta nuevamente.');
+    } finally {
+      setPaying(false);
+    }
   };
 
-  const handleFinishAndFreeTable = async () => {
+  const handleFinishAndFreeTable = () => {
     setShowPaymentModal(false);
     setPaymentConfirmed(false);
-    await resetActiveTable();
+    setReceiptResult(null);
+    setCustomerEmail('');
+    setPaymentError('');
     if (onGoToMenu) onGoToMenu();
   };
 
   // ──────────────────────────────────────────────────────────────────────────
-  // Vista: Carrito Vacío (solo si NO hay comanda en cocina Y NO hay nuevos platos)
+  // Vista: Carrito Vacío (solo si NO hay comanda en cocina, NO hay nuevos platos y no está abierto el modal de confirmación)
   // ──────────────────────────────────────────────────────────────────────────
-  if (!hasKitchenOrder && !hasNewItems) {
+  if (!hasKitchenOrder && !hasNewItems && !showPaymentModal) {
     return (
       <div className="client-scroll-area" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', minHeight: '60vh' }}>
         <div style={{
@@ -457,9 +487,55 @@ export default function ClientCartPage({ onGoToMenu, onOrderSuccess }) {
                   marginBottom: '16px'
                 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', color: 'var(--c-text-muted)' }}>
-                    <span>Consumo en mesa ({totalItemCount} platos)</span>
-                    <span style={{ fontWeight: 700, color: '#1F242E' }}>{formatPrice(tableTotal)}</span>
+                    <span>Consumo confirmado en cocina</span>
+                    <span style={{ fontWeight: 700, color: '#1F242E' }}>{formatPrice(billableTotal)}</span>
                   </div>
+                </div>
+
+                {/* Correo obligatorio para envío de comprobante al 100% de clientes */}
+                <div style={{ marginBottom: '18px' }}>
+                  <label
+                    htmlFor="client-receipt-email"
+                    style={{ display: 'block', fontSize: '12px', fontWeight: 800, color: 'var(--c-text-main)', marginBottom: '6px' }}
+                  >
+                    Correo para tu comprobante electrónico *
+                  </label>
+                  <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                    <Mail
+                      size={16}
+                      color="var(--c-text-muted)"
+                      style={{ position: 'absolute', left: '12px', pointerEvents: 'none' }}
+                    />
+                    <input
+                      id="client-receipt-email"
+                      type="email"
+                      required
+                      value={customerEmail}
+                      onChange={(e) => {
+                        setCustomerEmail(e.target.value);
+                        if (paymentError) setPaymentError('');
+                      }}
+                      placeholder="cliente@correo.com"
+                      style={{
+                        width: '100%',
+                        padding: '11px 12px 11px 36px',
+                        borderRadius: '12px',
+                        border: paymentError ? '1.5px solid #DC2626' : '1px solid var(--c-cream-border)',
+                        fontSize: '13.5px',
+                        backgroundColor: '#FFFFFF',
+                        color: '#1F242E',
+                        outline: 'none'
+                      }}
+                    />
+                  </div>
+                  <p style={{ fontSize: '11px', color: 'var(--c-text-muted)', marginTop: '5px' }}>
+                    Enviamos el detalle de tu boleta al 100% de las visitas al confirmar el pago.
+                  </p>
+                  {paymentError && (
+                    <p style={{ fontSize: '12px', fontWeight: 700, color: '#DC2626', marginTop: '6px' }}>
+                      {paymentError}
+                    </p>
+                  )}
                 </div>
 
                 {/* Selector de propina sugerida */}
@@ -555,16 +631,29 @@ export default function ClientCartPage({ onGoToMenu, onOrderSuccess }) {
                 {/* Botón de Confirmación */}
                 <button
                   onClick={handleConfirmPayment}
+                  disabled={paying}
                   className="btn-primary"
                   style={{
                     width: '100%',
                     padding: '14px',
                     borderRadius: '16px',
                     fontSize: '15px',
-                    fontWeight: 800
+                    fontWeight: 800,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '8px',
+                    opacity: paying ? 0.75 : 1
                   }}
                 >
-                  <span>Confirmar Pago • {formatPrice(finalPaymentTotal)}</span>
+                  {paying ? (
+                    <>
+                      <Loader2 size={18} className="animate-spin" />
+                      <span>Procesando pago y comprobante...</span>
+                    </>
+                  ) : (
+                    <span>Confirmar Pago • {formatPrice(finalPaymentTotal)}</span>
+                  )}
                 </button>
               </>
             ) : (
@@ -586,19 +675,33 @@ export default function ClientCartPage({ onGoToMenu, onOrderSuccess }) {
                 <h3 style={{ fontSize: '20px', fontWeight: 800, color: 'var(--c-burgundy-800)', marginBottom: '6px' }}>
                   ¡Pago Realizado con Éxito!
                 </h3>
-                <p style={{ fontSize: '13px', color: 'var(--c-text-muted)', maxWidth: '280px', margin: '0 auto 16px' }}>
-                  Tu pago de <strong>{formatPrice(finalPaymentTotal)}</strong> ha sido registrado. Muchas gracias por tu preferencia en C'est doux P.
+                <p style={{ fontSize: '13px', color: 'var(--c-text-muted)', maxWidth: '300px', margin: '0 auto 16px' }}>
+                  Tu pago de <strong>{formatPrice(receiptResult?.total_pagado ?? finalPaymentTotal)}</strong> ha sido registrado y la Mesa {tableNumber} quedó liberada.
                 </p>
 
                 <div style={{
                   background: 'var(--c-cream-bg)',
                   borderRadius: '12px',
-                  padding: '10px 14px',
+                  padding: '12px 14px',
                   fontSize: '12.5px',
                   color: 'var(--c-text-main)',
-                  marginBottom: '20px'
+                  marginBottom: '20px',
+                  textAlign: 'left',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '6px'
                 }}>
-                  Mesa {tableNumber} • Boleta electrónica generada
+                  <div>
+                    <strong>Comprobante:</strong> {receiptResult?.comprobante_codigo || 'Emitido'}
+                  </div>
+                  <div>
+                    <strong>Correo:</strong> {receiptResult?.correo_cliente || customerEmail}
+                  </div>
+                  <div style={{ color: receiptResult?.comprobante_enviado ? '#15803D' : '#B45309', fontWeight: 700 }}>
+                    {receiptResult?.comprobante_enviado
+                      ? 'Comprobante enviado por correo electrónico.'
+                      : 'Comprobante emitido y respaldado en el sistema (pendiente de servidor SMTP).'}
+                  </div>
                 </div>
 
                 <button
@@ -612,7 +715,7 @@ export default function ClientCartPage({ onGoToMenu, onOrderSuccess }) {
                     fontWeight: 700
                   }}
                 >
-                  Finalizar y Liberar Mesa
+                  Finalizar y Volver al Menú
                 </button>
               </div>
             )}

@@ -1,5 +1,5 @@
 import { useRef } from 'react';
-import { CATEGORIES } from '../../data/initialProducts';
+import { DEFAULT_CATEGORIES } from '../../data/initialProducts';
 import { X } from 'lucide-react';
 
 // Hook interno para scroll táctil fluido y arrastre por mouse en pantallas móviles y desktop
@@ -85,6 +85,7 @@ function useSwipeScroll(scrollRef) {
 }
 
 export default function CategoryPills({
+  categories = DEFAULT_CATEGORIES,
   activeCategory = 'todos',
   onSelectCategory,
   activeTag = null,
@@ -96,6 +97,8 @@ export default function CategoryPills({
   const catSwipe = useSwipeScroll(catScrollRef);
   const tagSwipe = useSwipeScroll(tagScrollRef);
 
+  const categoryList = Array.isArray(categories) && categories.length > 0 ? categories : DEFAULT_CATEGORIES;
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
       {/* 1. Fila de Categorías Principales (Desplazable con el tactil en teléfono) */}
@@ -106,7 +109,7 @@ export default function CategoryPills({
         role="tablist"
         aria-label="Categorías del menú"
       >
-        {CATEGORIES.map((cat) => {
+        {categoryList.map((cat) => {
           const isActive = activeCategory === cat.id;
           return (
             <button

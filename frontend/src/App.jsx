@@ -8,6 +8,8 @@ const EmployeeLayout = lazy(() => import('./layouts/EmployeeLayout'));
 const ClientLayout = lazy(() => import('./layouts/ClientLayout'));
 const RoleBasedDashboard = lazy(() => import('./pages/employee/RoleBasedDashboard'));
 const EmployeeQRPage = lazy(() => import('./pages/employee/EmployeeQRPage'));
+const AdminOrdersPage = lazy(() => import('./pages/employee/AdminOrdersPage'));
+const AdminProductsPage = lazy(() => import('./pages/employee/AdminProductsPage'));
 
 function AdminOnlyRoute({ children }) {
   const { user } = useAuth();
@@ -31,6 +33,22 @@ export default function App() {
 
                 <Route path="/" element={<EmployeeLayout />}>
                   <Route index element={<RoleBasedDashboard />} />
+                  <Route
+                    path="admin/pedidos"
+                    element={
+                      <AdminOnlyRoute>
+                        <AdminOrdersPage />
+                      </AdminOnlyRoute>
+                    }
+                  />
+                  <Route
+                    path="admin/productos"
+                    element={
+                      <AdminOnlyRoute>
+                        <AdminProductsPage />
+                      </AdminOnlyRoute>
+                    }
+                  />
                   <Route
                     path="staff/qrs"
                     element={

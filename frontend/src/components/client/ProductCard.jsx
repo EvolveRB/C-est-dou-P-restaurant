@@ -4,12 +4,12 @@ import { Plus, Ban, UtensilsCrossed } from 'lucide-react';
 import { useCart } from '../../context/CartContext';
 
 function formatDishUrl(src) {
-  if (!src) return '/plato_alpha.jpg';
-  if (src.startsWith('http://') || src.startsWith('https://') || src.startsWith('data:')) {
-    return src;
+  if (!src || typeof src !== 'string') return '';
+  const trimmed = src.trim();
+  if (trimmed.startsWith('http://') || trimmed.startsWith('https://') || trimmed.startsWith('data:')) {
+    return trimmed;
   }
-  const clean = src.replace(/^\/+/, '');
-  return `/${clean}`;
+  return '';
 }
 
 export default function ProductCard({ product, onOpenDetail, onSelectTag }) {
@@ -25,14 +25,7 @@ export default function ProductCard({ product, onOpenDetail, onSelectTag }) {
   }
 
   const handleImgError = () => {
-    if (currentSrc && !currentSrc.startsWith('/Imagenes/')) {
-      const clean = currentSrc.replace(/^\/+/, '');
-      setCurrentSrc(`/Imagenes/${clean}`);
-    } else if (currentSrc !== '/plato_alpha.jpg') {
-      setCurrentSrc('/plato_alpha.jpg');
-    } else {
-      setImgError(true);
-    }
+    setImgError(true);
   };
 
   const isAvailable = product.disponible !== false;
@@ -78,6 +71,8 @@ export default function ProductCard({ product, onOpenDetail, onSelectTag }) {
           <img
             src={currentSrc}
             alt={product.nombre}
+            loading="lazy"
+            decoding="async"
             onError={handleImgError}
             style={{ width: '100%', height: '100%', objectFit: 'cover' }}
           />
