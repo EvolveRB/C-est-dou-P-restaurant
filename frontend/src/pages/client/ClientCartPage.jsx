@@ -155,12 +155,9 @@ export default function ClientCartPage({ onGoToMenu, onOrderSuccess }) {
         }}>
           <ShoppingBag size={34} />
         </div>
-        <h3 style={{ fontSize: '18px', fontWeight: 800, color: 'var(--c-burgundy-800)', marginBottom: '6px' }}>
+        <h3 style={{ fontSize: '18px', fontWeight: 800, color: 'var(--c-burgundy-800)', marginBottom: '20px' }}>
           Tu carrito está vacío
         </h3>
-        <p style={{ fontSize: '13px', color: 'var(--c-text-muted)', maxWidth: '240px', marginBottom: '22px' }}>
-          Selecciona deliciosos platos de la carta para tu Mesa {tableNumber}.
-        </p>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', width: '100%', maxWidth: '260px' }}>
           <button

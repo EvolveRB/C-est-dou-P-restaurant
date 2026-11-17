@@ -25,12 +25,9 @@ export default function ClientOrderStatusPage({ onGoToMenu }) {
         }}>
           <Clock size={32} />
         </div>
-        <h3 style={{ fontSize: '18px', fontWeight: 800, color: 'var(--c-burgundy-800)', marginBottom: '6px' }}>
+        <h3 style={{ fontSize: '18px', fontWeight: 800, color: 'var(--c-burgundy-800)', marginBottom: '20px' }}>
           No hay pedidos activos
         </h3>
-        <p style={{ fontSize: '13px', color: 'var(--c-text-muted)', maxWidth: '240px', marginBottom: '22px' }}>
-          Aún no has solicitado platos para la Mesa {tableNumber}. Tu comanda aparecerá aquí una vez enviada.
-        </p>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', width: '100%', maxWidth: '240px' }}>
           <button

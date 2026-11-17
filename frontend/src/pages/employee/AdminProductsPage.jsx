@@ -86,6 +86,7 @@ export default function AdminProductsPage() {
   const [uploadingImage, setUploadingImage] = useState(false);
   const [uploadError, setUploadError] = useState('');
   const [previewUrl, setPreviewUrl] = useState('');
+  const [photoUploaded, setPhotoUploaded] = useState(false);
   const fileInputRef = useRef(null);
 
   // Gestión de Categorías y Etiquetas
@@ -138,6 +139,7 @@ export default function AdminProductsPage() {
     setCustomTagInput('');
     setUploadError('');
     setPreviewUrl('');
+    setPhotoUploaded(false);
     setShowProductModal(true);
   };
 
@@ -158,6 +160,7 @@ export default function AdminProductsPage() {
     setCustomTagInput('');
     setUploadError('');
     setPreviewUrl(currentUrl);
+    setPhotoUploaded(false);
     setShowProductModal(true);
   };
 
@@ -165,6 +168,7 @@ export default function AdminProductsPage() {
     const file = e.target.files?.[0];
     if (!file) return;
     setUploadError('');
+    setPhotoUploaded(false);
     const objectPreview = URL.createObjectURL(file);
     setPreviewUrl(objectPreview);
     setUploadingImage(true);
@@ -176,6 +180,7 @@ export default function AdminProductsPage() {
     if (res.success && res.url) {
       setProductForm((prev) => ({ ...prev, imagen: res.url }));
       setPreviewUrl(res.url);
+      setPhotoUploaded(true);
     } else {
       setUploadError(res.error || 'No se pudo subir la imagen a la nube.');
     }
@@ -234,7 +239,12 @@ export default function AdminProductsPage() {
     setSavingProduct(false);
     if (res.success) {
       setShowProductModal(false);
-      notify('ok', editingProductId ? 'Plato actualizado correctamente en MongoDB.' : 'Nuevo plato agregado a la carta.');
+      if (photoUploaded) {
+        notify('ok', 'Foto subida correctamente.');
+      } else {
+        notify('ok', editingProductId ? 'Plato actualizado correctamente.' : 'Nuevo plato agregado a la carta.');
+      }
+      setPhotoUploaded(false);
     } else {
       notify('error', res.error || 'No se pudo guardar el plato.');
     }
@@ -1001,8 +1011,8 @@ export default function AdminProductsPage() {
                     </div>
 
                     {productForm.imagen && !uploadError && !uploadingImage && (
-                      <span style={{ fontSize: '11.5px', color: '#15803D', fontWeight: 600, wordBreak: 'break-all' }}>
-                        Enlazada en nube: {productForm.imagen}
+                      <span style={{ fontSize: '11.5px', color: '#15803D', fontWeight: 700 }}>
+                        {photoUploaded ? 'Foto subida correctamente' : 'Imagen lista para mostrar'}
                       </span>
                     )}
 

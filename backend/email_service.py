@@ -1,7 +1,9 @@
 import asyncio
 import html
+import json
 import os
 import smtplib
+import urllib.request
 from email.message import EmailMessage
 from typing import Any, Dict
 
@@ -151,11 +153,57 @@ def _send_smtp_sync(to_email: str, subject: str, text_body: str, html_body: str)
             server.send_message(msg)
 
 
+def _send_resend_sync(to_email: str, subject: str, text_body: str, html_body: str) -> None:
+    api_key = (os.getenv("RESEND_API_KEY") or "").strip()
+    sender = (os.getenv("RESEND_FROM") or os.getenv("SMTP_FROM") or "C'est doux P <onboarding@resend.dev>").strip()
+    payload = json.dumps({
+        "from": sender,
+        "to": [to_email],
+        "subject": subject,
+        "text": text_body,
+        "html": html_body,
+    }).encode("utf-8")
+    req = urllib.request.Request(
+        "https://api.resend.com/emails",
+        data=payload,
+        method="POST",
+        headers={
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+            "User-Agent": "CestDouxP/1.0",
+        },
+    )
+    with urllib.request.urlopen(req, timeout=12) as resp:
+        if resp.status >= 400:
+            raise RuntimeError(f"Resend HTTP {resp.status}")
+
+
 async def send_receipt_email(to_email: str, receipt: Dict[str, Any]) -> Dict[str, Any]:
     """
-    Envía el comprobante electrónico al correo del cliente vía SMTP.
-    Si no hay credenciales SMTP configuradas en .env, registra el comprobante sin bloquear el pago.
+    Envía el comprobante electrónico al correo del cliente vía Resend API (HTTPS) o SMTP.
+    Si no hay credenciales configuradas en .env, registra el comprobante sin bloquear el pago.
     """
+    codigo = receipt.get("comprobante_codigo", "Comprobante")
+    subject = f"Tu comprobante C'est doux P ({codigo})"
+    text_body = build_receipt_text(receipt)
+    html_body = build_receipt_html(receipt)
+
+    resend_key = (os.getenv("RESEND_API_KEY") or "").strip()
+    if resend_key:
+        try:
+            await asyncio.to_thread(_send_resend_sync, to_email, subject, text_body, html_body)
+            return {
+                "sent": True,
+                "status": "enviado",
+                "detail": f"Comprobante enviado correctamente a {to_email}",
+            }
+        except Exception as exc:
+            return {
+                "sent": False,
+                "status": "error_email",
+                "detail": f"No se pudo enviar por Resend: {exc}",
+            }
+
     smtp_host = (os.getenv("SMTP_HOST") or "").strip()
     smtp_user = (os.getenv("SMTP_USER") or "").strip()
     smtp_password = (os.getenv("SMTP_PASSWORD") or "").strip()
@@ -164,13 +212,8 @@ async def send_receipt_email(to_email: str, receipt: Dict[str, Any]) -> Dict[str
         return {
             "sent": False,
             "status": "registrado_sin_smtp",
-            "detail": "Comprobante registrado en base de datos. Configura SMTP_HOST, SMTP_USER y SMTP_PASSWORD en .env para despacho externo.",
+            "detail": "Comprobante registrado en base de datos. Falta configurar un servicio de correo (RESEND_API_KEY o SMTP_*).",
         }
-
-    codigo = receipt.get("comprobante_codigo", "Comprobante")
-    subject = f"Tu comprobante C'est doux P ({codigo})"
-    text_body = build_receipt_text(receipt)
-    html_body = build_receipt_html(receipt)
 
     try:
         await asyncio.to_thread(_send_smtp_sync, to_email, subject, text_body, html_body)

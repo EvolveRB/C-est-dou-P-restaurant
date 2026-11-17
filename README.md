@@ -1,14 +1,12 @@
 # Sistema de Restaurante (C'est doux P)
 
-> ## Actualizaciones Recientes — Correcciones Control 3 y Producción
->
-> Este repositorio fue actualizado íntegramente para cumplir con los requerimientos de operación en producción, seguridad de credenciales y escalabilidad del escenario Control 3:
+> ## Actualizaciones Recientes
 >
 > 1. **Sincronización en Tiempo Real a 3 Segundos (`3000 ms`):**
 >    - Se unificó el intervalo de polling a **3 segundos** (`POLLING_INTERVAL_MS = 3000`) en [`RestaurantContext.jsx`](frontend/src/context/RestaurantContext.jsx) para cocina, garzón, administrador y seguimiento de mesa del cliente, reduciendo carga innecesaria de peticiones manteniendo avisos por debajo de los 3 segundos.
 > 2. **Almacenamiento de Imágenes en la Nube (Amazon S3 + AWS CloudFront):**
->    - Se implementó [`backend/storage_service.py`](backend/storage_service.py) y el endpoint [`POST /productos/upload-imagen`](backend/main.py) para subir imágenes directamente desde el gestor de archivos del panel de Administrador hacia el bucket privado **Amazon S3** (`carta-img` en `us-east-2`) usando `boto3`.
->    - Las imágenes se distribuyen globalmente a través de **AWS CloudFront** (`https://d29jcylbmgo4bc.cloudfront.net`) con **OAC (*Origin Access Control*)**, manteniendo el bucket S3 privado sin acceso público directo, con carga diferida (`loading="lazy"`, `decoding="async"`) y aprovechamiento de la capa gratuita (1 TB mensual de transferencia de salida).
+>    - Se implementó [`backend/storage_service.py`](backend/storage_service.py) y el endpoint [`POST /productos/upload-imagen`](backend/main.py) para subir imágenes directamente desde el gestor de archivos del panel de Administrador hacia el bucket privado **Amazon S3**
+>    - Las imágenes se distribuyen globalmente a través de **AWS CloudFront**
 > 3. **Comprobante Electrónico Opcional por Correo o Retiro Presencial:**
 >    - Se implementó [`backend/email_service.py`](backend/email_service.py) y [`POST /mesas/{num_mesa}/pagar`](backend/main.py) junto con el campo opcional de correo en [`ClientCartPage.jsx`](frontend/src/pages/client/ClientCartPage.jsx).
 >    - Si el comensal ingresa un correo válido (ej. Gmail, Outlook, etc.), recibe su comprobante HTML por SMTP; si lo deja vacío, registra su transacción y solicita su boleta de forma presencial.
@@ -124,47 +122,47 @@ doux_p/
 
 ## Catálogo de Endpoints de la API
 
-| Endpoint                                              | Método               | Tag                | Descripción                                                                                |
-| :---------------------------------------------------- | :------------------- | :----------------- | :----------------------------------------------------------------------------------------- |
-| `/auth/status`                                        | `GET`                | Auth               | Verifica si el sistema requiere activación inicial del Administrador                       |
-| `/auth/setup-admin`                                   | `POST`               | Auth               | Crea el primer Administrador en SQLite (se bloquea tras su uso)                            |
-| `/empleados/login`                                    | `POST`               | Auth               | Autentica por RUT/usuario contra SQLite y emite cookie `HttpOnly`                          |
-| `/empleados/me`                                       | `GET`                | Auth               | Valida la sesión activa desde cookie `HttpOnly`                                            |
-| `/empleados/logout`                                   | `POST`               | Auth               | Cierra sesión y elimina la cookie `HttpOnly`                                               |
-| `/empleados/cambiar-password`                         | `POST`               | Auth               | Cambia la clave temporal obligatoria o actualiza la contraseña actual                      |
-| `/auth/logs`                                          | `GET`                | Auth               | Retorna los registros de actividad filtrados por el rol autenticado                        |
-| `/empleados`                                          | `GET` / `POST`       | Empleados          | Lista trabajadores o crea trabajador con clave temporal aleatoria (Solo Admin)             |
-| `/empleados/{id}/reset-password`                      | `POST`               | Empleados          | Genera nueva contraseña temporal aleatoria para el trabajador (Solo Admin)                 |
-| `/empleados/{id}/rol`                                 | `PUT` / `PATCH`      | Empleados          | Modifica el rol del trabajador en SQLite (Solo Admin)                                      |
-| `/empleados/{id}`                                     | `DELETE`             | Empleados          | Elimina trabajador de SQLite (Solo Admin)                                                  |
-| `/mesas`                                              | `GET` / `POST`       | Mesas              | Retorna listado único de mesas (`1..N`) o crea nueva mesa en MongoDB                       |
-| `/mesas/cantidad`                                     | `POST`               | Mesas              | Ajusta dinámicamente el total de mesas entre **1 y 50** (Solo Admin)                       |
-| `/mesas/{num_mesa}/estado`                            | `PUT`                | 3. UPDATE          | Sincroniza estado de mesa y pedidos activos                                                |
-| `/mesas/{num_mesa}/pagar`                             | `POST`               | Pagos/Comprobantes | Registra transacción, envía comprobante por correo si se ingresa email y libera la mesa    |
-| `/mesas/{num_mesa}/liberar`                           | `POST`               | 3. UPDATE          | Libera mesa, marca pedidos entregados y cierra llamadas tras pago del cliente              |
-| `/mesas/{num_mesa}`                                   | `DELETE`             | 4. DELETE          | Elimina mesa si su estado es `'Libre'` (Solo Admin)                                        |
-| `/mesas/{num}/validar-qr`                             | `GET`                | Mesa               | Valida token QR; retorna 403 si no coincide                                                |
-| `/catalogo/filtros`                                   | `GET`                | Catálogo           | Retorna categorías y etiquetas activas sincronizadas con `db.producto`                     |
-| `/productos/upload-imagen`                            | `POST`               | Catálogo           | Sube imagen desde archivo local al bucket S3 (`carta-img`) y devuelve URL de CloudFront    |
-| `/productos`                                          | `POST`               | 1. INSERT          | Registra plato en catálogo (Cocina/Admin)                                                  |
-| `/productos/filtrados`                                | `GET`                | 2. SELECT          | Consulta catálogo de productos con categorías normalizadas y URLs CloudFront               |
-| `/productos/{id}`                                     | `PUT` / `DELETE`     | Catálogo           | Actualiza todos los campos del plato (incl. categoría, etiquetas, imagen) o lo elimina     |
-| `/productos/{id}/precio`                              | `PUT`                | 3. UPDATE          | Actualiza precio unitario del producto (Cocina/Admin)                                      |
-| `/productos/{id}/disponible`                          | `PATCH`              | 3. UPDATE          | Activa o pausa disponibilidad en carta (Cocina/Admin)                                      |
-| `/admin/pedidos-transacciones`                        | `GET`                | Admin Finanzas     | Resumen financiero, medios de pago, comprobantes, pedidos y filtro por sucursal            |
-| `/admin/transacciones/{id}/reenviar-comprobante`      | `POST`               | Admin Finanzas     | Reintenta envío del comprobante por correo electrónico para una transacción                |
-| `/admin/filtros/categorias`                           | `POST` / `PUT`/`DEL` | Admin Catálogo     | Crea, renombra o elimina categorías en cascada sobre `db.producto` (Solo Admin)            |
-| `/admin/filtros/etiquetas`                            | `POST` / `PUT`/`DEL` | Admin Catálogo     | Crea, renombra o elimina etiquetas en cascada sobre `db.producto` (Solo Admin)             |
-| `/pedidos`                                            | `POST`               | 1. INSERT          | Inserta comanda o acumula platos adicionales a la mesa activa                              |
-| `/pedidos/mesa/{num_mesa}`                            | `GET`                | 2. SELECT          | Retorna el pedido activo de una mesa específica para el comensal                           |
-| `/pedidos/info-mesas`                                 | `GET`                | 2. SELECT          | Retorna comanda activa más reciente por mesa para el personal                              |
-| `/pedidos/detalles-platos`                            | `GET`                | 2. SELECT          | Retorna items embebidos en los pedidos para el personal                                    |
-| `/visitas`                                            | `POST`               | Visita             | Inicia nueva visita para comensales en mesa                                                |
-| `/visitas/{id}/llamar-garzon`                         | `PATCH`              | Visita             | Marca `solicitud_garzon.activa = True`                                                     |
-| `/visitas/{id}/atender-garzon`                        | `PATCH`              | Visita             | Desactiva las alertas de garzón activas en la mesa                                         |
-| `/admin/alter-1` / `revertir`                         | `POST` / `DELETE`    | 5. ALTER/DROP      | Agrega o revierte atributo `telefono` en MongoDB (Solo Admin)                              |
-| `/admin/alter-2` / `revertir`                         | `POST` / `DELETE`    | 5. ALTER/DROP      | Agrega o revierte atributo `fecha_entrega` en pedidos (Solo Admin)                         |
-| `/admin/preparar-temporada` / `drop`                  | `POST` / `DELETE`    | 5. ALTER/DROP      | Crea o elimina colección promocional semilla (Solo Admin)                                  |
+| Endpoint                                         | Método               | Tag                | Descripción                                                                             |
+| :----------------------------------------------- | :------------------- | :----------------- | :-------------------------------------------------------------------------------------- |
+| `/auth/status`                                   | `GET`                | Auth               | Verifica si el sistema requiere activación inicial del Administrador                    |
+| `/auth/setup-admin`                              | `POST`               | Auth               | Crea el primer Administrador en SQLite (se bloquea tras su uso)                         |
+| `/empleados/login`                               | `POST`               | Auth               | Autentica por RUT/usuario contra SQLite y emite cookie `HttpOnly`                       |
+| `/empleados/me`                                  | `GET`                | Auth               | Valida la sesión activa desde cookie `HttpOnly`                                         |
+| `/empleados/logout`                              | `POST`               | Auth               | Cierra sesión y elimina la cookie `HttpOnly`                                            |
+| `/empleados/cambiar-password`                    | `POST`               | Auth               | Cambia la clave temporal obligatoria o actualiza la contraseña actual                   |
+| `/auth/logs`                                     | `GET`                | Auth               | Retorna los registros de actividad filtrados por el rol autenticado                     |
+| `/empleados`                                     | `GET` / `POST`       | Empleados          | Lista trabajadores o crea trabajador con clave temporal aleatoria (Solo Admin)          |
+| `/empleados/{id}/reset-password`                 | `POST`               | Empleados          | Genera nueva contraseña temporal aleatoria para el trabajador (Solo Admin)              |
+| `/empleados/{id}/rol`                            | `PUT` / `PATCH`      | Empleados          | Modifica el rol del trabajador en SQLite (Solo Admin)                                   |
+| `/empleados/{id}`                                | `DELETE`             | Empleados          | Elimina trabajador de SQLite (Solo Admin)                                               |
+| `/mesas`                                         | `GET` / `POST`       | Mesas              | Retorna listado único de mesas (`1..N`) o crea nueva mesa en MongoDB                    |
+| `/mesas/cantidad`                                | `POST`               | Mesas              | Ajusta dinámicamente el total de mesas entre **1 y 50** (Solo Admin)                    |
+| `/mesas/{num_mesa}/estado`                       | `PUT`                | 3. UPDATE          | Sincroniza estado de mesa y pedidos activos                                             |
+| `/mesas/{num_mesa}/pagar`                        | `POST`               | Pagos/Comprobantes | Registra transacción, envía comprobante por correo si se ingresa email y libera la mesa |
+| `/mesas/{num_mesa}/liberar`                      | `POST`               | 3. UPDATE          | Libera mesa, marca pedidos entregados y cierra llamadas tras pago del cliente           |
+| `/mesas/{num_mesa}`                              | `DELETE`             | 4. DELETE          | Elimina mesa si su estado es `'Libre'` (Solo Admin)                                     |
+| `/mesas/{num}/validar-qr`                        | `GET`                | Mesa               | Valida token QR; retorna 403 si no coincide                                             |
+| `/catalogo/filtros`                              | `GET`                | Catálogo           | Retorna categorías y etiquetas activas sincronizadas con `db.producto`                  |
+| `/productos/upload-imagen`                       | `POST`               | Catálogo           | Sube imagen desde archivo local al bucket S3 (`carta-img`) y devuelve URL de CloudFront |
+| `/productos`                                     | `POST`               | 1. INSERT          | Registra plato en catálogo (Cocina/Admin)                                               |
+| `/productos/filtrados`                           | `GET`                | 2. SELECT          | Consulta catálogo de productos con categorías normalizadas y URLs CloudFront            |
+| `/productos/{id}`                                | `PUT` / `DELETE`     | Catálogo           | Actualiza todos los campos del plato (incl. categoría, etiquetas, imagen) o lo elimina  |
+| `/productos/{id}/precio`                         | `PUT`                | 3. UPDATE          | Actualiza precio unitario del producto (Cocina/Admin)                                   |
+| `/productos/{id}/disponible`                     | `PATCH`              | 3. UPDATE          | Activa o pausa disponibilidad en carta (Cocina/Admin)                                   |
+| `/admin/pedidos-transacciones`                   | `GET`                | Admin Finanzas     | Resumen financiero, medios de pago, comprobantes, pedidos y filtro por sucursal         |
+| `/admin/transacciones/{id}/reenviar-comprobante` | `POST`               | Admin Finanzas     | Reintenta envío del comprobante por correo electrónico para una transacción             |
+| `/admin/filtros/categorias`                      | `POST` / `PUT`/`DEL` | Admin Catálogo     | Crea, renombra o elimina categorías en cascada sobre `db.producto` (Solo Admin)         |
+| `/admin/filtros/etiquetas`                       | `POST` / `PUT`/`DEL` | Admin Catálogo     | Crea, renombra o elimina etiquetas en cascada sobre `db.producto` (Solo Admin)          |
+| `/pedidos`                                       | `POST`               | 1. INSERT          | Inserta comanda o acumula platos adicionales a la mesa activa                           |
+| `/pedidos/mesa/{num_mesa}`                       | `GET`                | 2. SELECT          | Retorna el pedido activo de una mesa específica para el comensal                        |
+| `/pedidos/info-mesas`                            | `GET`                | 2. SELECT          | Retorna comanda activa más reciente por mesa para el personal                           |
+| `/pedidos/detalles-platos`                       | `GET`                | 2. SELECT          | Retorna items embebidos en los pedidos para el personal                                 |
+| `/visitas`                                       | `POST`               | Visita             | Inicia nueva visita para comensales en mesa                                             |
+| `/visitas/{id}/llamar-garzon`                    | `PATCH`              | Visita             | Marca `solicitud_garzon.activa = True`                                                  |
+| `/visitas/{id}/atender-garzon`                   | `PATCH`              | Visita             | Desactiva las alertas de garzón activas en la mesa                                      |
+| `/admin/alter-1` / `revertir`                    | `POST` / `DELETE`    | 5. ALTER/DROP      | Agrega o revierte atributo `telefono` en MongoDB (Solo Admin)                           |
+| `/admin/alter-2` / `revertir`                    | `POST` / `DELETE`    | 5. ALTER/DROP      | Agrega o revierte atributo `fecha_entrega` en pedidos (Solo Admin)                      |
+| `/admin/preparar-temporada` / `drop`             | `POST` / `DELETE`    | 5. ALTER/DROP      | Crea o elimina colección promocional semilla (Solo Admin)                               |
 
 ---
 
