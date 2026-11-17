@@ -6,12 +6,15 @@
 >
 > 1. **Sincronización en Tiempo Real a 3 Segundos (`3000 ms`):**
 >    - Se unificó el intervalo de polling a **3 segundos** (`POLLING_INTERVAL_MS = 3000`) en [`RestaurantContext.jsx`](frontend/src/context/RestaurantContext.jsx) para cocina, garzón, administrador y seguimiento de mesa del cliente, reduciendo carga innecesaria de peticiones manteniendo avisos por debajo de los 3 segundos.
+> 2. **Almacenamiento de Imágenes en la Nube (Amazon S3 + AWS CloudFront):**
+>    - Se implementó [`backend/storage_service.py`](backend/storage_service.py) y el endpoint [`POST /productos/upload-imagen`](backend/main.py) para subir imágenes directamente desde el gestor de archivos del panel de Administrador hacia el bucket privado **Amazon S3** (`carta-img` en `us-east-2`) usando `boto3`.
+>    - Las imágenes se distribuyen globalmente a través de **AWS CloudFront** (`https://d29jcylbmgo4bc.cloudfront.net`) con **OAC (*Origin Access Control*)**, manteniendo el bucket S3 privado sin acceso público directo, con carga diferida (`loading="lazy"`, `decoding="async"`) y aprovechamiento de la capa gratuita (1 TB mensual de transferencia de salida).
 > 3. **Comprobante Electrónico Opcional por Correo o Retiro Presencial:**
 >    - Se implementó [`backend/email_service.py`](backend/email_service.py) y [`POST /mesas/{num_mesa}/pagar`](backend/main.py) junto con el campo opcional de correo en [`ClientCartPage.jsx`](frontend/src/pages/client/ClientCartPage.jsx).
 >    - Si el comensal ingresa un correo válido (ej. Gmail, Outlook, etc.), recibe su comprobante HTML por SMTP; si lo deja vacío, registra su transacción y solicita su boleta de forma presencial.
 > 4. **Nuevos Layouts para Administrador (Transacciones + Carta, Filtros y Etiquetas):**
 >    - **Pedidos y Transacciones ([`AdminOrdersPage.jsx`](frontend/src/pages/employee/AdminOrdersPage.jsx)):** Diseñado con enfoque financiero prioritario en **transacciones y caja** (ingresos totales, propinas, ticket promedio, desglose por medio de pago, estado/reenvío de comprobantes y filtro multi-sucursal para múltiples locales), manteniendo la **vista de mesas en vivo** y comandas clicables.
->    - **Carta, Filtros y Etiquetas ([`AdminProductsPage.jsx`](frontend/src/pages/employee/AdminProductsPage.jsx)):** Panel CRUD conectado a MongoDB para administrar platos, URLs externas de imágenes y categorías/etiquetas con propagación hacia el catálogo de clientes.
+>    - **Carta, Filtros y Etiquetas ([`AdminProductsPage.jsx`](frontend/src/pages/employee/AdminProductsPage.jsx)):** Panel CRUD conectado a MongoDB para administrar platos, subir fotos desde archivos locales hacia S3/CloudFront y gestionar categorías/etiquetas con propagación hacia el catálogo de clientes.
 
 ---
 
@@ -47,19 +50,19 @@ De esta forma, se busca disminuir la dependencia del garzón para realizar pedid
 ### Experiencia del Cliente (Mobile-First / Acceso por Código QR)
 
 - **Acceso Directo por Mesa**: El cliente escanea el código QR de su mesa y accede a `/mesa/:numeroMesa` con validación de token QR en tiempo real.
-- **Catálogo Interactivo con Filtros y Etiquetas Dinámicas**: Filtrado por categorías sincronizadas con MongoDB (`/catalogo/filtros`), etiquetas dietéticas e imágenes alojadas externamente en Azure Blob Storage (`loading="lazy"`).
+- **Catálogo Interactivo con Filtros y Etiquetas Dinámicas**: Filtrado por categorías sincronizadas con MongoDB (`/catalogo/filtros`), etiquetas dietéticas e imágenes servidas vía **AWS CloudFront + Amazon S3** (`loading="lazy"`).
 - **Detalle y Personalización de Platillos**: Modal con selector de cantidades, notas para cocina y visualización fotográfica.
 - **Carrito Dinámico y Comanda en Dos Tiempos**: Persistencia local del carrito solo para el comensal, bloqueo de platos despachados a cocina y sección inferior para rondas adicionales.
 - **Botón Llamar al Garzón**: Asistencia en salón con destello reactivo para el Garzón y apagado inmediato al atender la mesa.
-- **Autogestión de Pago, Comprobante al 100% y Cierre de Mesa**: Modal de cierre de cuenta con cálculo de propina (0%, 10%, 15%), correo obligatorio para envío de comprobante electrónico al 100% de clientes, registro en `transacciones` y liberación automática de la mesa.
+- **Autogestión de Pago, Comprobante y Cierre de Mesa**: Modal de cierre de cuenta con cálculo de propina (0%, 10%, 15%), correo opcional para boleta electrónica (o solicitud presencial si queda vacío), registro en `transacciones` y liberación automática de la mesa.
 
 ### Portal de Personal, Salón y Cocina (Desktop & Tablet)
 
 - **Acceso por RUT y Rol**: Login unificado con asistente de activación inicial en primer arranque y cambio obligatorio de clave temporal para nuevos trabajadores.
 - **Vistas Especializadas por Rol**:
-  - **Administrador — Personal (`AdminDashboardPage`)**: Gestión de plantilla de trabajadores en SQLite, reseteo de claves, cambio de rol y bitácora del perfil.
+  - **Administrador — Personal (`AdminDashboardPage`)**: Gestión de plantilla de trabajadores en SQLite, reseteo de claves y cambio de rol.
   - **Administrador — Pedidos y Transacciones (`AdminOrdersPage`)**: Panel prioritario de transacciones, ingresos, propinas, desglose por medio de pago, filtro por sucursal/local, reenvío de comprobantes y vista en vivo de mesas clicables.
-  - **Administrador — Carta, Filtros y Etiquetas (`AdminProductsPage`)**: Gestión CRUD completa de platos en MongoDB (incluyendo URLs de Azure Blob Storage) y administración en cascada de categorías y etiquetas.
+  - **Administrador — Carta, Filtros y Etiquetas (`AdminProductsPage`)**: Gestión CRUD completa de platos en MongoDB (con subida de fotos directa hacia S3/CloudFront desde archivo local) y administración en cascada de categorías y etiquetas.
   - **Generador de Códigos QR (`EmployeeQRPage`)**: Control único para ajustar dinámicamente entre **1 y 50 mesas** y exportar/imprimir los códigos QR de cada mesa.
   - **Garzón (`GarzonTablesPage`)**: Salón interactivo con filtros rápidos, monitor de llamadas de comensales con destello luminoso interactivo y registros propios del perfil.
   - **Cocina (`EmployeeDashboardPage`)**: Carta de elaboración en tiempo real (polling cada 3s), visor de comanda (`CookOrderModal`) y control de disponibilidad de platos.
@@ -73,21 +76,22 @@ doux_p/
 ├── .gitignore                  # Excluye .env, __pycache__, *.pyc, dist/ y node_modules
 ├── backend/
 │   ├── database.py             # Conexión dual: Motor (MONGO_URI por env) + SQLAlchemy (SQLite restaurant.db)
-│   ├── email_service.py        # Envío de comprobantes HTML/texto por SMTP al 100% de clientes
+│   ├── email_service.py        # Envío de comprobantes HTML/texto por SMTP al cliente
+│   ├── storage_service.py      # Subida segura a Amazon S3 (boto3) y entrega vía AWS CloudFront
 │   ├── models.py               # Modelos relacionales SQLite (Usuario, PerfilLog, AppConfig)
-│   ├── security.py             # RUT chileno, hashing PBKDF2-HMAC-SHA256, claves aleatorias y tokens HMAC
+│   ├── security.py             # RUT chileno (9 dígitos + M11), hashing PBKDF2-HMAC-SHA256, tokens HMAC
 │   ├── main.py                 # API FastAPI, cookies HttpOnly, pagos/transacciones, catálogo, filtros y SPA
 │   ├── migracion.py            # Migración de usuarios a SQLite con hasheo y limpieza en MongoDB
 │   ├── test_suite.py           # Suite de pruebas automatizadas (seguridad + endpoints MongoDB/SQLite)
 │   ├── test_mongo.py           # Script de verificación de conectividad y ping a Atlas
 │   ├── restaurant.db           # Base de datos SQLite (usuarios, contraseñas hasheadas y logs por perfil)
-│   ├── requirements.txt        # Dependencias Python (FastAPI, SQLAlchemy, Motor, Pymongo, Uvicorn, etc.)
-│   └── .env.example            # Plantilla segura (MONGO_URI, AZURE_BLOB_BASE_URL, SMTP_*, AUTH_SECRET_KEY)
+│   ├── requirements.txt        # Dependencias Python (FastAPI, SQLAlchemy, Motor, boto3, Uvicorn, etc.)
+│   └── .env.example            # Plantilla segura (MONGO_URI, AWS_S3_*, CLOUDFRONT_BASE_URL, SMTP_*, AUTH_SECRET_KEY)
 │
 └── frontend/
     ├── index.html              # Entrada HTML con tipografía unificada Plus Jakarta Sans
     ├── package.json            # Dependencias (React 19, Vite, React Router, Lucide, QRCode)
-    ├── .env.example            # Plantilla segura (VITE_API_URL, VITE_AZURE_IMAGES_BASE_URL)
+    ├── .env.example            # Plantilla segura (VITE_API_URL, VITE_CDN_IMAGES_BASE_URL)
     └── src/
         ├── App.jsx             # Enrutador con carga diferida (React.lazy) y rutas Admin (/admin/pedidos, /admin/productos)
         ├── utils/
@@ -136,14 +140,15 @@ doux_p/
 | `/mesas`                                              | `GET` / `POST`       | Mesas              | Retorna listado único de mesas (`1..N`) o crea nueva mesa en MongoDB                       |
 | `/mesas/cantidad`                                     | `POST`               | Mesas              | Ajusta dinámicamente el total de mesas entre **1 y 50** (Solo Admin)                       |
 | `/mesas/{num_mesa}/estado`                            | `PUT`                | 3. UPDATE          | Sincroniza estado de mesa y pedidos activos                                                |
-| `/mesas/{num_mesa}/pagar`                             | `POST`               | Pagos/Comprobantes | Registra transacción, envía comprobante por correo al 100% de clientes y libera la mesa    |
+| `/mesas/{num_mesa}/pagar`                             | `POST`               | Pagos/Comprobantes | Registra transacción, envía comprobante por correo si se ingresa email y libera la mesa    |
 | `/mesas/{num_mesa}/liberar`                           | `POST`               | 3. UPDATE          | Libera mesa, marca pedidos entregados y cierra llamadas tras pago del cliente              |
 | `/mesas/{num_mesa}`                                   | `DELETE`             | 4. DELETE          | Elimina mesa si su estado es `'Libre'` (Solo Admin)                                        |
 | `/mesas/{num}/validar-qr`                             | `GET`                | Mesa               | Valida token QR; retorna 403 si no coincide                                                |
 | `/catalogo/filtros`                                   | `GET`                | Catálogo           | Retorna categorías y etiquetas activas sincronizadas con `db.producto`                     |
+| `/productos/upload-imagen`                            | `POST`               | Catálogo           | Sube imagen desde archivo local al bucket S3 (`carta-img`) y devuelve URL de CloudFront    |
 | `/productos`                                          | `POST`               | 1. INSERT          | Registra plato en catálogo (Cocina/Admin)                                                  |
-| `/productos/filtrados`                                | `GET`                | 2. SELECT          | Consulta catálogo de productos con categorías normalizadas y URLs Azure Blob               |
-| `/productos/{id}`                                     | `PUT` / `DELETE`     | Catálogo           | Actualiza todos los campos del plato (incl. categoría, etiquetas, URL Azure) o lo elimina  |
+| `/productos/filtrados`                                | `GET`                | 2. SELECT          | Consulta catálogo de productos con categorías normalizadas y URLs CloudFront               |
+| `/productos/{id}`                                     | `PUT` / `DELETE`     | Catálogo           | Actualiza todos los campos del plato (incl. categoría, etiquetas, imagen) o lo elimina     |
 | `/productos/{id}/precio`                              | `PUT`                | 3. UPDATE          | Actualiza precio unitario del producto (Cocina/Admin)                                      |
 | `/productos/{id}/disponible`                          | `PATCH`              | 3. UPDATE          | Activa o pausa disponibilidad en carta (Cocina/Admin)                                      |
 | `/admin/pedidos-transacciones`                        | `GET`                | Admin Finanzas     | Resumen financiero, medios de pago, comprobantes, pedidos y filtro por sucursal            |
@@ -174,8 +179,8 @@ copy backend\.env.example backend\.env
 copy frontend\.env.example frontend\.env
 ```
 
-- En `backend/.env`: configura `MONGO_URI`, `AUTH_SECRET_KEY`, opcionalmente `AZURE_BLOB_BASE_URL` para las imágenes de la carta y las variables `SMTP_*` para el envío real de comprobantes por correo.
-- En `frontend/.env`: configura `VITE_API_URL` y opcionalmente `VITE_AZURE_IMAGES_BASE_URL`.
+- En `backend/.env`: configura `MONGO_URI`, `AUTH_SECRET_KEY`, las credenciales de AWS (`AWS_S3_BUCKET`, `AWS_REGION`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `CLOUDFRONT_BASE_URL`) y las variables `SMTP_*` para el envío de comprobantes por correo.
+- En `frontend/.env`: configura `VITE_API_URL` y opcionalmente `VITE_CDN_IMAGES_BASE_URL`.
 
 ### 2. Backend (FastAPI + SQLite + MongoDB Atlas)
 
