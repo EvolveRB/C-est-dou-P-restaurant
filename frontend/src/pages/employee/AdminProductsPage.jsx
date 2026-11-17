@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useRef } from 'react';
 import {
   Plus,
   Search,
@@ -12,9 +12,35 @@ import {
   X,
   Check,
   Image as ImageIcon,
+  Upload,
+  Loader2,
 } from 'lucide-react';
 import { useRestaurant } from '../../context/RestaurantContext';
 import { DEFAULT_CATEGORIES, formatPrice } from '../../data/initialProducts';
+
+function ProductThumb({ src, alt }) {
+  const [prevSrc, setPrevSrc] = useState(src);
+  const [failed, setFailed] = useState(false);
+
+  if (prevSrc !== src) {
+    setPrevSrc(src);
+    setFailed(false);
+  }
+
+  if (!src || failed) {
+    return <ImageIcon size={20} color="#94A3B8" />;
+  }
+  return (
+    <img
+      src={src}
+      alt={alt}
+      loading="lazy"
+      decoding="async"
+      onError={() => setFailed(true)}
+      style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+    />
+  );
+}
 
 const EMPTY_FORM = {
   nombre: '',
@@ -32,6 +58,7 @@ export default function AdminProductsPage() {
   const {
     products,
     catalogFilters,
+    uploadProductImage,
     createProduct,
     updateProduct,
     deleteProduct,
@@ -56,6 +83,10 @@ export default function AdminProductsPage() {
   const [productForm, setProductForm] = useState(EMPTY_FORM);
   const [customTagInput, setCustomTagInput] = useState('');
   const [savingProduct, setSavingProduct] = useState(false);
+  const [uploadingImage, setUploadingImage] = useState(false);
+  const [uploadError, setUploadError] = useState('');
+  const [previewUrl, setPreviewUrl] = useState('');
+  const fileInputRef = useRef(null);
 
   // Gestión de Categorías y Etiquetas
   const [newCategoryName, setNewCategoryName] = useState('');
@@ -102,27 +133,52 @@ export default function AdminProductsPage() {
     setEditingProductId(null);
     setProductForm({
       ...EMPTY_FORM,
-      categoria: categoryList[0]?.nombre || 'Platos de Fondo',
+      categoria: categoryList[0]?.nombre || 'Almuerzos',
     });
     setCustomTagInput('');
+    setUploadError('');
+    setPreviewUrl('');
     setShowProductModal(true);
   };
 
   const openEditModal = (prod) => {
     setEditingProductId(prod.id);
+    const currentUrl = prod.imagen || prod.imagenRaw || '';
     setProductForm({
       nombre: prod.nombre || '',
-      categoria: prod.categoriaNombre || prod.categoria || 'Platos de Fondo',
+      categoria: prod.categoriaNombre || prod.categoria || 'Almuerzos',
       precio: String(prod.precio ?? ''),
       tiempo_preparacion: prod.tiempo ?? prod.tiempo_preparacion ?? 15,
-      imagen: prod.imagenRaw || prod.imagen || '',
+      imagen: currentUrl,
       descripcion: prod.descripcion || '',
       disponibilidad: prod.disponibilidad !== false,
       destacado: Boolean(prod.destacado),
       etiquetas: Array.isArray(prod.etiquetas) ? [...prod.etiquetas] : [],
     });
     setCustomTagInput('');
+    setUploadError('');
+    setPreviewUrl(currentUrl);
     setShowProductModal(true);
+  };
+
+  const handleImageFileChange = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadError('');
+    const objectPreview = URL.createObjectURL(file);
+    setPreviewUrl(objectPreview);
+    setUploadingImage(true);
+    const res = await uploadProductImage(file, productForm.nombre);
+    setUploadingImage(false);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+    if (res.success && res.url) {
+      setProductForm((prev) => ({ ...prev, imagen: res.url }));
+      setPreviewUrl(res.url);
+    } else {
+      setUploadError(res.error || 'No se pudo subir la imagen a la nube.');
+    }
   };
 
   const toggleFormTag = (tagName) => {
@@ -456,18 +512,7 @@ export default function AdminProductsPage() {
                         overflow: 'hidden',
                         flexShrink: 0,
                       }}>
-                        {prod.imagen ? (
-                          <img
-                            src={prod.imagen}
-                            alt={prod.nombre}
-                            loading="lazy"
-                            decoding="async"
-                            onError={(e) => { e.currentTarget.style.display = 'none'; }}
-                            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                          />
-                        ) : (
-                          <ImageIcon size={20} color="#94A3B8" />
-                        )}
+                        <ProductThumb src={prod.imagen} alt={prod.nombre} />
                       </div>
                       <div style={{ minWidth: 0, flex: 1 }}>
                         <div style={{ fontSize: '11px', fontWeight: 800, color: 'var(--c-terracotta)', textTransform: 'uppercase' }}>
@@ -865,27 +910,108 @@ export default function AdminProductsPage() {
                 </div>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '10px' }}>
-                <div>
-                  <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, marginBottom: '4px' }}>Tiempo prep. (min)</label>
-                  <input
-                    type="number"
-                    min="1"
-                    value={productForm.tiempo_preparacion}
-                    onChange={(e) => setProductForm({ ...productForm, tiempo_preparacion: e.target.value })}
-                    style={{ width: '100%', padding: '9px 12px', borderRadius: '10px', border: '1px solid #CBD5E1', fontSize: '13.5px' }}
-                  />
-                </div>
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, marginBottom: '4px' }}>Tiempo prep. (min)</label>
+                <input
+                  type="number"
+                  min="1"
+                  value={productForm.tiempo_preparacion}
+                  onChange={(e) => setProductForm({ ...productForm, tiempo_preparacion: e.target.value })}
+                  style={{ width: '100%', padding: '9px 12px', borderRadius: '10px', border: '1px solid #CBD5E1', fontSize: '13.5px' }}
+                />
+              </div>
 
-                <div>
-                  <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, marginBottom: '4px' }}>Imagen (URL Azure Blob o archivo)</label>
-                  <input
-                    type="text"
-                    aria-label="Imagen del plato"
-                    value={productForm.imagen}
-                    onChange={(e) => setProductForm({ ...productForm, imagen: e.target.value })}
-                    style={{ width: '100%', padding: '9px 12px', borderRadius: '10px', border: '1px solid #CBD5E1', fontSize: '13.5px' }}
-                  />
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, marginBottom: '6px' }}>Imagen del plato</label>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp,image/gif"
+                  onChange={handleImageFileChange}
+                  style={{ display: 'none' }}
+                />
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '12px',
+                  padding: '10px 12px',
+                  borderRadius: '12px',
+                  border: '1px dashed #CBD5E1',
+                  background: '#F8FAFC',
+                }}>
+                  <div style={{
+                    width: '60px',
+                    height: '60px',
+                    borderRadius: '10px',
+                    background: '#EFE7DF',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    overflow: 'hidden',
+                    flexShrink: 0,
+                  }}>
+                    <ProductThumb src={previewUrl || productForm.imagen} alt={productForm.nombre || 'Vista previa'} />
+                  </div>
+
+                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', alignItems: 'center' }}>
+                      <button
+                        type="button"
+                        onClick={() => fileInputRef.current?.click()}
+                        disabled={uploadingImage}
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          padding: '8px 12px',
+                          borderRadius: '10px',
+                          border: '1px solid var(--c-burgundy-800)',
+                          background: '#FFFFFF',
+                          color: 'var(--c-burgundy-800)',
+                          fontSize: '12.5px',
+                          fontWeight: 700,
+                          cursor: uploadingImage ? 'wait' : 'pointer',
+                        }}
+                      >
+                        {uploadingImage ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />}
+                        <span>{uploadingImage ? 'Subiendo imagen a la nube...' : 'Seleccionar imagen desde archivo'}</span>
+                      </button>
+
+                      {productForm.imagen && !uploadingImage && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setProductForm((prev) => ({ ...prev, imagen: '' }));
+                            setPreviewUrl('');
+                          }}
+                          style={{
+                            padding: '7px 10px',
+                            borderRadius: '9px',
+                            border: '1px solid #E2E8F0',
+                            background: '#FFFFFF',
+                            color: '#64748B',
+                            fontSize: '12px',
+                            fontWeight: 600,
+                            cursor: 'pointer',
+                          }}
+                        >
+                          Quitar
+                        </button>
+                      )}
+                    </div>
+
+                    {productForm.imagen && !uploadError && !uploadingImage && (
+                      <span style={{ fontSize: '11.5px', color: '#15803D', fontWeight: 600, wordBreak: 'break-all' }}>
+                        Enlazada en nube: {productForm.imagen}
+                      </span>
+                    )}
+
+                    {uploadError && (
+                      <span style={{ fontSize: '11.5px', color: '#DC2626', fontWeight: 600 }}>
+                        {uploadError}
+                      </span>
+                    )}
+                  </div>
                 </div>
               </div>
 
@@ -980,11 +1106,11 @@ export default function AdminProductsPage() {
                 </button>
                 <button
                   type="submit"
-                  disabled={savingProduct}
+                  disabled={savingProduct || uploadingImage}
                   className="btn-primary"
-                  style={{ padding: '10px 18px', borderRadius: '11px', fontSize: '13.5px', fontWeight: 700 }}
+                  style={{ padding: '10px 18px', borderRadius: '11px', fontSize: '13.5px', fontWeight: 700, opacity: uploadingImage ? 0.65 : 1 }}
                 >
-                  {savingProduct ? 'Guardando...' : editingProductId ? 'Guardar Cambios' : 'Crear Plato'}
+                  {savingProduct ? 'Guardando...' : uploadingImage ? 'Subiendo foto...' : editingProductId ? 'Guardar Cambios' : 'Crear Plato'}
                 </button>
               </div>
             </form>

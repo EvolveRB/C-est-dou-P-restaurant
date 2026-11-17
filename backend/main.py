@@ -7,7 +7,8 @@ from datetime import datetime, timezone, timedelta
 from typing import Optional, List, Union
 
 from bson import ObjectId
-from fastapi import FastAPI, Depends, HTTPException, Body, Request, Response
+from fastapi import FastAPI, Depends, HTTPException, Body, Request, Response, UploadFile, File, Form
+from fastapi.concurrency import run_in_threadpool
 from fastapi.encoders import ENCODERS_BY_TYPE
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
@@ -17,6 +18,7 @@ from sqlalchemy.orm import Session
 
 from database import get_db, get_sqlite_db, init_sqlite_db
 from email_service import send_receipt_email
+from storage_service import get_cdn_base_url, upload_image_to_s3
 from models import Usuario, PerfilLog
 from security import (
     SESSION_COOKIE_NAME,
@@ -248,8 +250,8 @@ def normalize_category_name(raw_cat: Optional[str]) -> str:
 
 
 def resolver_imagen_producto(doc: dict) -> Optional[str]:
-    """Resuelve la URL de imagen del producto (Azure Blob Storage o URL externa, sin archivos locales)."""
-    azure_base = (os.getenv("AZURE_BLOB_BASE_URL") or "").strip().rstrip("/")
+    """Resuelve la URL de imagen del producto (CloudFront/S3 o URL externa, sin archivos locales)."""
+    cdn_base = get_cdn_base_url()
     img = doc.get("imagen")
     if not img or not str(img).strip():
         return None
@@ -259,8 +261,8 @@ def resolver_imagen_producto(doc: dict) -> Optional[str]:
     clean_name = img_str.lstrip("/\\")
     if clean_name.lower().startswith("imagenes/"):
         clean_name = clean_name[9:]
-    if azure_base and clean_name:
-        return f"{azure_base}/{clean_name}"
+    if cdn_base and clean_name:
+        return f"{cdn_base}/{clean_name}"
     return None
 
 
@@ -1057,6 +1059,44 @@ async def ensure_carta_config(db) -> dict:
         }
         await db.carta_config.insert_one(doc)
     return doc
+
+
+@app.post("/productos/upload-imagen", tags=["Catálogo"])
+async def subir_imagen_producto(
+    file: UploadFile = File(...),
+    nombre_plato: Optional[str] = Form(None),
+    staff: Usuario = Depends(require_roles("Cocinero", "Administrador")),
+    sqlite_db: Session = Depends(get_sqlite_db),
+):
+    """Recibe una imagen desde el gestor de archivos, la sube a Amazon S3 y retorna su URL de CloudFront."""
+    try:
+        file_bytes = await file.read()
+        uploaded = await run_in_threadpool(
+            upload_image_to_s3,
+            file_bytes,
+            file.filename,
+            file.content_type,
+            nombre_plato,
+        )
+        registrar_log(
+            sqlite_db,
+            staff,
+            staff.rol,
+            "Imagen subida a S3/CloudFront",
+            uploaded["key"],
+        )
+        return {
+            "mensaje": "Imagen subida correctamente a la nube",
+            "url": uploaded["url"],
+            "key": uploaded["key"],
+            "bucket": uploaded["bucket"],
+        }
+    except ValueError as ve:
+        raise HTTPException(status_code=400, detail=str(ve))
+    except PermissionError as pe:
+        raise HTTPException(status_code=503, detail=str(pe))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.post("/productos", tags=["1. INSERT (3)"])

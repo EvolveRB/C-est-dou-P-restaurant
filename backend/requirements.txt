@@ -6,3 +6,5 @@ pymongo
 pydantic
 aiofiles
 sqlalchemy
+boto3
+python-multipart

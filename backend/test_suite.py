@@ -18,6 +18,7 @@ from security import (
     create_session_token,
     verify_session_token,
 )
+from storage_service import slugify_dish_name, get_cdn_base_url, upload_image_to_s3
 from main import (
     is_valid_receipt_email,
     select_productos_por_precio,
@@ -92,6 +93,13 @@ async def run_tests():
             assert is_valid_receipt_email("cliente@gmail.com") is True
             assert is_valid_receipt_email("cliente@outlook.com") is True
             assert is_valid_receipt_email("cliente@correo.zz") is False
+            assert slugify_dish_name("Tiramisú Tradicional") == "tiramisu-tradicional"
+            assert "cloudfront.net" in get_cdn_base_url()
+            try:
+                upload_image_to_s3(b"fake", "plato.txt", "text/plain")
+                raise AssertionError("Debía rechazar formato .txt")
+            except ValueError:
+                pass
             temp = generate_temp_password()
             hashed = hash_password(temp)
             assert hashed != temp and verify_password(temp, hashed) is True
@@ -283,7 +291,7 @@ async def run_tests():
             )
             await eliminar_categoria_catalogo(
                 nombre="__CatTemp2__",
-                reassign_to="Platos de Fondo",
+                reassign_to="Almuerzos",
                 admin=dummy_staff,
                 db=db,
                 sqlite_db=sqlite_db,

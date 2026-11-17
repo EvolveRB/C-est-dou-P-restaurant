@@ -6,7 +6,11 @@ import { roleLog } from '../utils/roleLogger';
 import { capitalizePersonName, normalizeRut } from '../utils/rut';
 
 const API_URL = import.meta.env.VITE_API_URL ?? (import.meta.env.DEV ? 'http://localhost:8000' : '');
-const AZURE_IMAGES_BASE_URL = (import.meta.env.VITE_AZURE_IMAGES_BASE_URL || '').trim().replace(/\/+$/, '');
+const AZURE_IMAGES_BASE_URL = (
+  import.meta.env.VITE_CDN_IMAGES_BASE_URL ||
+  import.meta.env.VITE_AZURE_IMAGES_BASE_URL ||
+  'https://d29jcylbmgo4bc.cloudfront.net'
+).trim().replace(/\/+$/, '');
 const POLLING_INTERVAL_MS = 3000;
 
 const RestaurantContext = createContext(null);
@@ -742,6 +746,28 @@ export function RestaurantProvider({ children }) {
     }
   };
 
+  const uploadProductImage = async (file, nombrePlato = '') => {
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      if (nombrePlato && String(nombrePlato).trim()) {
+        formData.append('nombre_plato', String(nombrePlato).trim());
+      }
+      const res = await fetch(`${API_URL}/productos/upload-imagen`, {
+        method: 'POST',
+        credentials: 'include',
+        body: formData,
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        return { success: false, error: body?.detail || 'No se pudo subir la imagen a la nube.' };
+      }
+      return { success: true, url: body.url, key: body.key };
+    } catch {
+      return { success: false, error: 'Error de red al subir la imagen.' };
+    }
+  };
+
   const createProduct = async (productData) => {
     try {
       const res = await fetch(`${API_URL}/productos`, {
@@ -1026,6 +1052,7 @@ export function RestaurantProvider({ children }) {
         submitOrderForTable,
         updateTableStatus,
         toggleProductAvailability,
+        uploadProductImage,
         createProduct,
         updateProduct,
         deleteProduct,
