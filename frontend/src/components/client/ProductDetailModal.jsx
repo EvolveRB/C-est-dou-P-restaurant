@@ -150,7 +150,7 @@ export default function ProductDetailModal({ product, onClose }) {
           </label>
           <input
             type="text"
-            placeholder="Ej: sin sal, término medio, salsa aparte..."
+            aria-label="Indicaciones especiales para la cocina"
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
             disabled={!isAvailable}

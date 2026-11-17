@@ -21,6 +21,7 @@ from models import Usuario, PerfilLog
 from security import (
     SESSION_COOKIE_NAME,
     SESSION_TTL_SECONDS,
+    capitalize_person_name,
     create_session_token,
     generate_temp_password,
     get_signing_secret,
@@ -86,8 +87,8 @@ def serialize_usuario(u: Usuario) -> dict:
         "id": u.id,
         "_id": str(u.id),
         "rut": u.rut,
-        "nombre": u.nombre,
-        "apellido": u.apellido or "",
+        "nombre": capitalize_person_name(u.nombre),
+        "apellido": capitalize_person_name(u.apellido or ""),
         "correo": u.correo,
         "username": u.username,
         "rol": u.rol,
@@ -197,6 +198,39 @@ def require_roles(*allowed_roles: str):
 
 
 EMAIL_REGEX = re.compile(r"^[^\s@]+@[^\s@]+\.[^\s@]+$")
+KNOWN_EMAIL_DOMAINS = {
+    "gmail.com",
+    "googlemail.com",
+    "outlook.com",
+    "outlook.es",
+    "outlook.cl",
+    "hotmail.com",
+    "hotmail.es",
+    "hotmail.cl",
+    "live.com",
+    "live.cl",
+    "msn.com",
+    "yahoo.com",
+    "yahoo.es",
+    "icloud.com",
+    "me.com",
+    "mac.com",
+    "proton.me",
+    "protonmail.com",
+    "gmx.com",
+    "aol.com",
+}
+VALID_EMAIL_TLDS = (".com", ".cl", ".es", ".net", ".org", ".edu", ".edu.cl", ".gob.cl", ".gov", ".me", ".io")
+
+
+def is_valid_receipt_email(email: str) -> bool:
+    clean = (email or "").strip().lower()
+    if not EMAIL_REGEX.match(clean):
+        return False
+    _, domain = clean.rsplit("@", 1)
+    if domain in KNOWN_EMAIL_DOMAINS:
+        return True
+    return any(domain.endswith(tld) and len(domain) > len(tld) + 1 for tld in VALID_EMAIL_TLDS)
 
 
 def now_chile_dt() -> datetime:
@@ -355,7 +389,7 @@ class PedidoCreate(BaseModel):
 
 
 class PagoMesaInput(BaseModel):
-    correo_cliente: str
+    correo_cliente: Optional[str] = None
     metodo_pago: str = "tarjeta"
     propina_porcentaje: int = 10
     sucursal: Optional[str] = "Local 1 - Casa Matriz"
@@ -470,11 +504,14 @@ async def setup_initial_admin(
             raise HTTPException(status_code=403, detail="INVALID_SETUP_CODE")
 
     if not is_valid_rut_format(payload.rut):
-        raise HTTPException(status_code=400, detail="RUT inválido. Usa formato 12345678-9.")
+        raise HTTPException(
+            status_code=400,
+            detail="RUT inválido. Debe tener exactamente 9 dígitos (ej: 12.345.678-9) y dígito verificador válido.",
+        )
 
     rut_norm = normalize_rut(payload.rut)
-    nombre_clean = (payload.nombre or "").strip()
-    apellido_clean = (payload.apellido or "").strip()
+    nombre_clean = capitalize_person_name(payload.nombre)
+    apellido_clean = capitalize_person_name(payload.apellido)
     if not nombre_clean:
         raise HTTPException(status_code=400, detail="El nombre del administrador es obligatorio.")
 
@@ -702,11 +739,14 @@ async def crear_empleado(
     La contraseña temporal se devuelve una sola vez para que el Administrador la entregue al trabajador.
     """
     if not is_valid_rut_format(emp.rut):
-        raise HTTPException(status_code=400, detail="RUT inválido. Usa formato 12345678-9.")
+        raise HTTPException(
+            status_code=400,
+            detail="RUT inválido. Debe tener exactamente 9 dígitos (ej: 12.345.678-9) y dígito verificador válido.",
+        )
 
     rut_norm = normalize_rut(emp.rut)
-    nombre_clean = (emp.nombre or "").strip()
-    apellido_clean = (emp.apellido or "").strip()
+    nombre_clean = capitalize_person_name(emp.nombre)
+    apellido_clean = capitalize_person_name(emp.apellido)
     if not nombre_clean:
         raise HTTPException(status_code=400, detail="El nombre del trabajador es obligatorio.")
 
@@ -995,8 +1035,25 @@ async def ensure_carta_config(db) -> dict:
     if not doc:
         doc = {
             "_id": "filtros",
-            "categorias": ["Entradas", "Sopas", "Platos de Fondo", "Pastas", "Postres", "Bebidas"],
-            "etiquetas": ["Sin Gluten", "Vegetariano", "Vegano", "Chef Choice", "Especialidad"],
+            "categorias": [
+                "Desayunos",
+                "Entradas",
+                "Almuerzos",
+                "Postres",
+                "Bebestibles",
+                "Alimentos para Alérgicos",
+                "Café",
+                "Combos",
+            ],
+            "etiquetas": [
+                "Sin Gluten",
+                "Sin Lactosa",
+                "Sin Frutos Secos",
+                "Vegetariano",
+                "Vegano",
+                "Chef Choice",
+                "Especialidad",
+            ],
         }
         await db.carta_config.insert_one(doc)
     return doc
@@ -1415,15 +1472,17 @@ METODOS_PAGO_LABELS = {
 @app.post("/mesas/{num_mesa}/pagar", tags=["Pagos y Comprobantes"])
 async def pagar_y_liberar_mesa(num_mesa: int, pago: PagoMesaInput, db=Depends(get_db)):
     """
-    Registra el pago completo de la mesa, envía comprobante electrónico al 100% de los clientes
-    por correo y libera la mesa automáticamente.
+    Registra el pago completo de la mesa y la libera automáticamente.
+    Si el cliente indica un correo válido (gmail, outlook, etc.), envía la boleta electrónica;
+    si deja el correo vacío, queda registrada para entrega presencial.
     """
     try:
         correo = (pago.correo_cliente or "").strip().lower()
-        if not correo or not EMAIL_REGEX.match(correo):
+        solicita_correo = bool(correo)
+        if solicita_correo and not is_valid_receipt_email(correo):
             raise HTTPException(
                 status_code=400,
-                detail="Ingresa un correo electrónico válido para enviar tu comprobante.",
+                detail="Ingresa un correo válido (ej. @gmail.com, @outlook.com, @hotmail.com, @yahoo.com o .cl) o déjalo vacío para pedir tu boleta presencialmente.",
             )
 
         metodo = (pago.metodo_pago or "tarjeta").strip().lower()
@@ -1474,16 +1533,17 @@ async def pagar_y_liberar_mesa(num_mesa: int, pago: PagoMesaInput, db=Depends(ge
             "correo_cliente": correo,
             "fecha_pago": ahora.isoformat(),
             "fecha_legible": ahora.strftime("%d/%m/%Y %H:%M"),
-            "comprobante_solicitado": True,
+            "comprobante_solicitado": solicita_correo,
             "comprobante_enviado": False,
-            "estado_envio_correo": "procesando",
-            "detalle_envio_correo": "",
+            "estado_envio_correo": "procesando" if solicita_correo else "presencial",
+            "detalle_envio_correo": "" if solicita_correo else "Boleta solicitada de forma presencial en restaurante",
         }
 
-        email_result = await send_receipt_email(correo, transaccion_doc)
-        transaccion_doc["comprobante_enviado"] = bool(email_result.get("sent"))
-        transaccion_doc["estado_envio_correo"] = email_result.get("status", "registrado")
-        transaccion_doc["detalle_envio_correo"] = email_result.get("detail", "")
+        if solicita_correo:
+            email_result = await send_receipt_email(correo, transaccion_doc)
+            transaccion_doc["comprobante_enviado"] = bool(email_result.get("sent"))
+            transaccion_doc["estado_envio_correo"] = email_result.get("status", "registrado")
+            transaccion_doc["detalle_envio_correo"] = email_result.get("detail", "")
 
         res_tx = await db.transacciones.insert_one(transaccion_doc)
         tx_id = str(res_tx.inserted_id)
@@ -1534,6 +1594,7 @@ async def pagar_y_liberar_mesa(num_mesa: int, pago: PagoMesaInput, db=Depends(ge
             "transaccion_id": tx_id,
             "comprobante_codigo": codigo_comprobante,
             "correo_cliente": correo,
+            "comprobante_solicitado": solicita_correo,
             "comprobante_enviado": transaccion_doc["comprobante_enviado"],
             "estado_envio_correo": transaccion_doc["estado_envio_correo"],
             "detalle_envio_correo": transaccion_doc["detalle_envio_correo"],

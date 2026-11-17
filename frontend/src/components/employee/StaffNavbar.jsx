@@ -1,6 +1,7 @@
-import { NavLink, Link } from 'react-router-dom';
+import { NavLink } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
-import { Utensils, LogOut, User, ChefHat } from 'lucide-react';
+import { ChefHat } from 'lucide-react';
+import UserProfileMenu from './UserProfileMenu';
 
 export default function StaffNavbar() {
   const { user, logout } = useAuth();
@@ -25,34 +26,13 @@ export default function StaffNavbar() {
           <ChefHat size={16} />
           <span>Cocina & Pedidos</span>
         </NavLink>
-
-        <Link
-          to="/mesa/1"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="staff-nav-item"
-        >
-          <Utensils size={16} color="var(--c-terracotta)" />
-          <span>Ver Menú Cliente (Mesa 1)</span>
-        </Link>
       </nav>
 
-      <div className="staff-user-actions">
-        <div className="staff-user-pill">
-          <User size={15} color="#94A3B8" />
-          <span style={{ fontWeight: 600 }}>{user?.displayName || 'Personal'}</span>
-          <span className="staff-user-role">({user?.role || 'Cocina'})</span>
-        </div>
-
-        <button
-          className="staff-logout-btn"
-          onClick={logout}
-          title="Cerrar sesión"
-        >
-          <LogOut size={15} />
-          <span>Salir</span>
-        </button>
-      </div>
+      <UserProfileMenu
+        displayName={user?.displayName || 'Personal'}
+        roleLabel={user?.role || 'Cocina'}
+        onLogout={logout}
+      />
     </header>
   );
 }

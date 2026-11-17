@@ -6,7 +6,6 @@ import {
   CreditCard,
   Banknote,
   Smartphone,
-  RefreshCw,
   Search,
   Store,
   LayoutGrid,
@@ -19,7 +18,6 @@ import {
 import { useRestaurant } from '../../context/RestaurantContext';
 import { formatPrice } from '../../data/initialProducts';
 import CookOrderModal from '../../components/employee/CookOrderModal';
-import RoleLogsPanel from '../../components/employee/RoleLogsPanel';
 
 const TABLE_STATUS_META = {
   Libre: { bg: '#F8FAFC', border: '#E2E8F0', text: '#64748B', label: 'Libre' },
@@ -40,7 +38,7 @@ export default function AdminOrdersPage() {
     tables,
     updateTableStatus,
     adminPedidosData,
-    loadingAdminPedidos,
+    adminPedidosError,
     fetchAdminOrdersAndTransactions,
     resendTransactionReceipt,
   } = useRestaurant();
@@ -144,7 +142,7 @@ export default function AdminOrdersPage() {
   const envRate = totalTx > 0 ? Math.round(((resumen.comprobantes_enviados || 0) / totalTx) * 100) : 100;
 
   return (
-    <div style={{ maxWidth: '1260px', margin: '0 auto', padding: '20px 18px 40px' }}>
+    <div style={{ width: '100%', maxWidth: '1260px', margin: '0 auto', padding: '20px 18px 40px', boxSizing: 'border-box' }}>
       {/* Cabecera */}
       <div style={{
         display: 'flex',
@@ -155,15 +153,9 @@ export default function AdminOrdersPage() {
         marginBottom: '20px',
       }}>
         <div>
-          <span style={{ fontSize: '11.5px', fontWeight: 800, color: 'var(--c-terracotta)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-            Administración Central • Vista Financiera y Operativa
-          </span>
-          <h1 style={{ fontSize: '26px', fontWeight: 800, color: '#14171F', margin: '2px 0 4px' }}>
+          <h1 style={{ fontSize: '26px', fontWeight: 800, color: '#14171F', margin: 0 }}>
             Pedidos y Transacciones
           </h1>
-          <p style={{ fontSize: '13.5px', color: '#64748B', margin: 0 }}>
-            Monitoreo en tiempo real (3s) de ingresos, comprobantes emitidos al 100% de clientes y estado de mesas por sucursal.
-          </p>
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
@@ -181,30 +173,23 @@ export default function AdminOrdersPage() {
               ))}
             </select>
           </div>
-
-          <button
-            type="button"
-            onClick={() => fetchAdminOrdersAndTransactions(selectedBranch)}
-            disabled={loadingAdminPedidos}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '6px',
-              padding: '9px 14px',
-              borderRadius: '12px',
-              border: '1px solid #EADBCE',
-              background: '#FFFFFF',
-              color: 'var(--c-burgundy-800)',
-              fontSize: '13px',
-              fontWeight: 700,
-              cursor: 'pointer',
-            }}
-          >
-            <RefreshCw size={15} />
-            <span>{loadingAdminPedidos ? 'Actualizando...' : 'Actualizar'}</span>
-          </button>
         </div>
       </div>
+
+      {adminPedidosError && (
+        <div style={{
+          marginBottom: '16px',
+          padding: '12px 16px',
+          borderRadius: '12px',
+          border: '1px solid #FCA5A5',
+          background: '#FEF2F2',
+          color: '#991B1B',
+          fontSize: '13px',
+          fontWeight: 600,
+        }}>
+          No se pudieron cargar los datos de transacciones desde la base de datos: {adminPedidosError}
+        </div>
+      )}
 
       {/* Selector de modo de vista */}
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '20px' }}>
@@ -292,14 +277,14 @@ export default function AdminOrdersPage() {
 
           <div style={{ background: '#FFFFFF', borderRadius: '16px', padding: '16px 18px', border: '1px solid #EADBCE' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-              <span style={{ fontSize: '12px', fontWeight: 700, color: '#64748B' }}>COMPROBANTES EMAIL (100%)</span>
+              <span style={{ fontSize: '12px', fontWeight: 700, color: '#64748B' }}>COMPROBANTES EMAIL</span>
               <Mail size={18} color="#15803D" />
             </div>
             <div style={{ fontSize: '25px', fontWeight: 800, color: '#15803D' }}>
-              {resumen.comprobantes_registrados || totalTx} <span style={{ fontSize: '14px', fontWeight: 700 }}>({envRate}% SMTP)</span>
+              {resumen.comprobantes_enviados || 0} <span style={{ fontSize: '14px', fontWeight: 700 }}>({envRate}% SMTP)</span>
             </div>
             <div style={{ fontSize: '12px', color: '#64748B', marginTop: '4px' }}>
-              {resumen.comprobantes_enviados || 0} enviados por SMTP • {totalTx - (resumen.comprobantes_enviados || 0)} respaldados
+              {resumen.comprobantes_registrados || 0} con correo • {totalTx - (resumen.comprobantes_registrados || 0)} presenciales
             </div>
           </div>
 
@@ -347,9 +332,6 @@ export default function AdminOrdersPage() {
               <h2 style={{ fontSize: '17px', fontWeight: 800, color: '#14171F', margin: 0 }}>
                 Vista de Mesas en Tiempo Real ({tableStats.ocupadas}/{tableStats.total} activas)
               </h2>
-              <p style={{ fontSize: '12.5px', color: '#64748B', margin: '2px 0 0' }}>
-                Haz clic en una mesa con pedido para inspeccionar su comanda o cambiar su estado.
-              </p>
             </div>
             <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', fontSize: '12px', fontWeight: 700 }}>
               <span style={{ padding: '4px 10px', borderRadius: '999px', background: '#FFF7ED', color: '#C2410C' }}>
@@ -447,9 +429,6 @@ export default function AdminOrdersPage() {
               <h2 style={{ fontSize: '17px', fontWeight: 800, color: '#14171F', margin: 0 }}>
                 Historial de Transacciones y Boletas ({filteredTransactions.length})
               </h2>
-              <p style={{ fontSize: '12.5px', color: '#64748B', margin: '2px 0 0' }}>
-                Cada pago registra monto, método, propina, detalle de platos y comprobante enviado al correo del cliente.
-              </p>
             </div>
 
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', alignItems: 'center' }}>
@@ -457,9 +436,9 @@ export default function AdminOrdersPage() {
                 <Search size={15} color="#94A3B8" style={{ position: 'absolute', left: '10px' }} />
                 <input
                   type="text"
+                  aria-label="Buscar transacciones"
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  placeholder="Buscar comprobante, correo, mesa..."
                   style={{
                     padding: '8px 12px 8px 32px',
                     borderRadius: '10px',
@@ -527,7 +506,7 @@ export default function AdminOrdersPage() {
                           <div style={{ fontWeight: 700 }}>Mesa {tx.num_mesa}</div>
                           <div style={{ fontSize: '11px', color: '#64748B' }}>{tx.sucursal || 'Local 1 - Casa Matriz'}</div>
                         </td>
-                        <td style={{ padding: '11px 8px', color: '#1F242E' }}>{tx.correo_cliente}</td>
+                        <td style={{ padding: '11px 8px', color: '#1F242E' }}>{tx.correo_cliente || 'Presencial'}</td>
                         <td style={{ padding: '11px 8px', color: '#475569', maxWidth: '220px' }}>
                           {(tx.items || []).map((it) => `${it.cantidad || 1}x ${it.nombre}`).join(', ') || 'Consumo en mesa'}
                         </td>
@@ -546,7 +525,11 @@ export default function AdminOrdersPage() {
                           )}
                         </td>
                         <td style={{ padding: '11px 8px' }}>
-                          {tx.comprobante_enviado ? (
+                          {!tx.correo_cliente ? (
+                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '3px 9px', borderRadius: '999px', background: '#F1F5F9', color: '#475569', fontSize: '11.5px', fontWeight: 700 }}>
+                              Presencial
+                            </span>
+                          ) : tx.comprobante_enviado ? (
                             <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '3px 9px', borderRadius: '999px', background: '#DCFCE7', color: '#15803D', fontSize: '11.5px', fontWeight: 700 }}>
                               <CheckCircle2 size={12} /> Enviado
                             </span>
@@ -557,27 +540,31 @@ export default function AdminOrdersPage() {
                           )}
                         </td>
                         <td style={{ padding: '11px 8px', textAlign: 'right' }}>
-                          <button
-                            type="button"
-                            onClick={() => handleResendReceipt(tx._id)}
-                            disabled={resendingId === tx._id}
-                            style={{
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: '5px',
-                              padding: '6px 10px',
-                              borderRadius: '9px',
-                              border: '1px solid #EADBCE',
-                              background: '#FAF5F0',
-                              color: 'var(--c-burgundy-800)',
-                              fontSize: '12px',
-                              fontWeight: 700,
-                              cursor: 'pointer',
-                            }}
-                          >
-                            <Send size={12} />
-                            <span>{resendingId === tx._id ? 'Enviando...' : 'Reenviar'}</span>
-                          </button>
+                          {tx.correo_cliente ? (
+                            <button
+                              type="button"
+                              onClick={() => handleResendReceipt(tx._id)}
+                              disabled={resendingId === tx._id}
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '5px',
+                                padding: '6px 10px',
+                                borderRadius: '9px',
+                                border: '1px solid #EADBCE',
+                                background: '#FAF5F0',
+                                color: 'var(--c-burgundy-800)',
+                                fontSize: '12px',
+                                fontWeight: 700,
+                                cursor: 'pointer',
+                              }}
+                            >
+                              <Send size={12} />
+                              <span>{resendingId === tx._id ? 'Enviando...' : 'Reenviar'}</span>
+                            </button>
+                          ) : (
+                            <span style={{ fontSize: '12px', color: '#94A3B8' }}>—</span>
+                          )}
                         </td>
                       </tr>
                     );
@@ -644,8 +631,6 @@ export default function AdminOrdersPage() {
           )}
         </section>
       )}
-
-      <RoleLogsPanel roleLabel="Administrador — Pedidos y Transacciones" />
 
       {selectedTableModal && (
         <CookOrderModal

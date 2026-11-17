@@ -14,10 +14,12 @@ from security import (
     generate_temp_password,
     normalize_rut,
     is_valid_rut_format,
+    capitalize_person_name,
     create_session_token,
     verify_session_token,
 )
 from main import (
+    is_valid_receipt_email,
     select_productos_por_precio,
     obtener_filtros_catalogo,
     crear_producto,
@@ -78,11 +80,18 @@ async def run_tests():
     created_prod_id = None
 
     try:
-        # Test 1: Seguridad (RUT, hashing PBKDF2 y tokens HMAC)
+        # Test 1: Seguridad (RUT 9 dígitos + M11, capitalización, correo, PBKDF2 y tokens HMAC)
         total += 1
         try:
             assert normalize_rut("12.345.678-k") == "12345678-K"
-            assert is_valid_rut_format("12.345.678-9") is True
+            assert is_valid_rut_format("12.345.678-5") is True
+            assert is_valid_rut_format("21.330.806-8") is True
+            assert is_valid_rut_format("12.345.678-9") is False
+            assert is_valid_rut_format("8.765.432-1") is False
+            assert capitalize_person_name("reinaldo berrios") == "Reinaldo Berrios"
+            assert is_valid_receipt_email("cliente@gmail.com") is True
+            assert is_valid_receipt_email("cliente@outlook.com") is True
+            assert is_valid_receipt_email("cliente@correo.zz") is False
             temp = generate_temp_password()
             hashed = hash_password(temp)
             assert hashed != temp and verify_password(temp, hashed) is True
@@ -90,7 +99,7 @@ async def run_tests():
             token = create_session_token({"sub": "1", "rol": "Administrador"}, "test-secret-key-123456")
             decoded = verify_session_token(token, "test-secret-key-123456")
             assert decoded is not None and decoded["rol"] == "Administrador"
-            print("✅ Test 1 PASÓ: Hashing PBKDF2, validación de RUT y tokens firmados.")
+            print("✅ Test 1 PASÓ: RUT 9 dígitos M11, capitalización, dominios correo, PBKDF2 y HMAC.")
             passed += 1
         except Exception as e:
             print(f"❌ Test 1 FALLÓ: {e}")
@@ -166,7 +175,7 @@ async def run_tests():
             res_pago = await pagar_y_liberar_mesa(
                 num_mesa=mesa_prueba,
                 pago=PagoMesaInput(
-                    correo_cliente="cliente.prueba@example.com",
+                    correo_cliente="cliente.prueba@gmail.com",
                     metodo_pago="tarjeta",
                     propina_porcentaje=10,
                 ),
@@ -174,6 +183,22 @@ async def run_tests():
             )
             created_tx_id = res_pago.get("transaccion_id")
             assert created_tx_id and res_pago.get("total_pagado") == 9900
+            assert res_pago.get("comprobante_solicitado") is True
+
+            # También validar pago opcional sin correo (boleta presencial)
+            res_pago_presencial = await pagar_y_liberar_mesa(
+                num_mesa=mesa_prueba,
+                pago=PagoMesaInput(
+                    correo_cliente="",
+                    metodo_pago="efectivo",
+                    propina_porcentaje=0,
+                ),
+                db=db,
+            )
+            assert res_pago_presencial.get("comprobante_solicitado") is False
+            assert res_pago_presencial.get("estado_envio_correo") == "presencial"
+            if res_pago_presencial.get("transaccion_id"):
+                await db.transacciones.delete_one({"_id": ObjectId(res_pago_presencial["transaccion_id"])})
 
             admin_panel = await obtener_pedidos_y_transacciones(
                 sucursal="Local 2 - Sucursal Centro",

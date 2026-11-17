@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { useRestaurant } from '../../context/RestaurantContext';
-import { formatRutDisplay, isValidRutFormat } from '../../utils/rut';
-import RoleLogsPanel from '../../components/employee/RoleLogsPanel';
+import { capitalizePersonName, formatRutDisplay, isValidRutFormat } from '../../utils/rut';
 import {
   Users,
   UserPlus,
@@ -82,7 +81,7 @@ export default function AdminDashboardPage() {
   const handleSaveEmployee = async (e) => {
     e.preventDefault();
     if (!isValidRutFormat(newRut)) {
-      setFormError('Ingresa un RUT válido (ej: 12.345.678-9).');
+      setFormError('RUT inválido. Debe tener exactamente 9 dígitos y dígito verificador válido.');
       return;
     }
     if (!newNombre.trim()) {
@@ -92,8 +91,8 @@ export default function AdminDashboardPage() {
     setFormError('');
     const res = await addEmployee({
       rut: newRut,
-      nombre: newNombre,
-      apellido: newApellido,
+      nombre: capitalizePersonName(newNombre),
+      apellido: capitalizePersonName(newApellido),
       correo: newCorreo,
       telefono: newTelefono,
       rol: newRol
@@ -228,9 +227,6 @@ export default function AdminDashboardPage() {
                   Plantilla de Trabajadores
                 </h2>
               </div>
-              <p style={{ fontSize: '13px', color: '#6B7280', margin: '4px 0 0' }}>
-                Supervisa al personal actual, gestiona y cambia sus roles (Cocinero, Garzón) o incorpora nuevo equipo.
-              </p>
             </div>
 
             <button
@@ -293,7 +289,7 @@ export default function AdminDashboardPage() {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(310px, 1fr))', gap: '14px' }}>
             {filteredEmployees.map((emp) => {
               const empId = emp._id || emp.id;
-              const nombreCompleto = `${emp.nombre || ''} ${emp.apellido || ''}`.trim();
+              const nombreCompleto = capitalizePersonName(`${emp.nombre || ''} ${emp.apellido || ''}`);
               const rolActual = emp.rol || emp.cargo || 'Garzón';
 
               const isCocinero = rolActual === 'Cocinero';
@@ -441,8 +437,6 @@ export default function AdminDashboardPage() {
             })}
           </div>
         </div>
-
-        <RoleLogsPanel roleLabel="Administrador" />
       </div>
 
       {/* ====================================================================
@@ -527,7 +521,7 @@ export default function AdminDashboardPage() {
                 <input
                   type="text"
                   required
-                  placeholder="12.345.678-9"
+                  aria-label="RUT"
                   value={newRut}
                   onChange={(e) => setNewRut(formatRutDisplay(e.target.value))}
                   style={{ width: '100%', padding: '9px 12px', borderRadius: '10px', border: '1px solid #CBD5E1', fontSize: '13px', boxSizing: 'border-box' }}
@@ -541,7 +535,7 @@ export default function AdminDashboardPage() {
                 <input
                   type="text"
                   required
-                  placeholder="Ej. Marcela / Ana / Ignacio"
+                  aria-label="Nombre"
                   value={newNombre}
                   onChange={(e) => setNewNombre(e.target.value)}
                   style={{ width: '100%', padding: '9px 12px', borderRadius: '10px', border: '1px solid #CBD5E1', fontSize: '13px', boxSizing: 'border-box' }}
@@ -554,7 +548,7 @@ export default function AdminDashboardPage() {
                 </label>
                 <input
                   type="text"
-                  placeholder="Ej. Soto / Morales"
+                  aria-label="Apellido"
                   value={newApellido}
                   onChange={(e) => setNewApellido(e.target.value)}
                   style={{ width: '100%', padding: '9px 12px', borderRadius: '10px', border: '1px solid #CBD5E1', fontSize: '13px', boxSizing: 'border-box' }}
@@ -582,7 +576,7 @@ export default function AdminDashboardPage() {
                 </label>
                 <input
                   type="email"
-                  placeholder="ejemplo@restaurant.cl"
+                  aria-label="Correo Electrónico"
                   value={newCorreo}
                   onChange={(e) => setNewCorreo(e.target.value)}
                   style={{ width: '100%', padding: '9px 12px', borderRadius: '10px', border: '1px solid #CBD5E1', fontSize: '13px', boxSizing: 'border-box' }}
@@ -595,7 +589,7 @@ export default function AdminDashboardPage() {
                 </label>
                 <input
                   type="tel"
-                  placeholder="+56 9 1234 5678"
+                  aria-label="Teléfono"
                   value={newTelefono}
                   onChange={(e) => setNewTelefono(e.target.value)}
                   style={{ width: '100%', padding: '9px 12px', borderRadius: '10px', border: '1px solid #CBD5E1', fontSize: '13px', boxSizing: 'border-box' }}

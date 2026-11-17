@@ -1,6 +1,7 @@
-import { NavLink, Link } from 'react-router-dom';
+import { NavLink } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
-import { ShieldCheck, QrCode, LogOut, User, Utensils, Receipt, BookOpen } from 'lucide-react';
+import { ShieldCheck, QrCode, Receipt, BookOpen } from 'lucide-react';
+import UserProfileMenu from './UserProfileMenu';
 
 export default function AdminNavbar() {
   const { user, logout } = useAuth();
@@ -49,36 +50,14 @@ export default function AdminNavbar() {
           <QrCode size={16} />
           <span>Generador de QRs</span>
         </NavLink>
-
-        <Link
-          to="/mesa/1"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="staff-nav-item"
-        >
-          <Utensils size={16} color="var(--c-terracotta)" />
-          <span>Ver Menú Cliente</span>
-        </Link>
       </nav>
 
-      <div className="staff-user-actions">
-        <div className="staff-user-pill">
-          <User size={15} color="#94A3B8" />
-          <span style={{ fontWeight: 600 }}>{user?.displayName || 'Admin'}</span>
-          <span className="staff-user-role" style={{ backgroundColor: '#F1F5F9', color: '#475569' }}>
-            Administrador
-          </span>
-        </div>
-
-        <button
-          className="staff-logout-btn"
-          onClick={logout}
-          title="Cerrar sesión"
-        >
-          <LogOut size={15} />
-          <span>Salir</span>
-        </button>
-      </div>
+      <UserProfileMenu
+        displayName={user?.displayName || 'Administrador'}
+        roleLabel="Administrador"
+        roleStyle={{ backgroundColor: '#F1F5F9', color: '#475569' }}
+        onLogout={logout}
+      />
     </header>
   );
 }

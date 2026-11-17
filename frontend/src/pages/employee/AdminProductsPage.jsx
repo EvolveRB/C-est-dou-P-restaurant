@@ -15,11 +15,10 @@ import {
 } from 'lucide-react';
 import { useRestaurant } from '../../context/RestaurantContext';
 import { DEFAULT_CATEGORIES, formatPrice } from '../../data/initialProducts';
-import RoleLogsPanel from '../../components/employee/RoleLogsPanel';
 
 const EMPTY_FORM = {
   nombre: '',
-  categoria: 'Platos de Fondo',
+  categoria: 'Almuerzos',
   precio: '',
   tiempo_preparacion: 15,
   imagen: '',
@@ -62,7 +61,7 @@ export default function AdminProductsPage() {
   const [newCategoryName, setNewCategoryName] = useState('');
   const [editingCat, setEditingCat] = useState(null);
   const [editingCatValue, setEditingCatValue] = useState('');
-  const [reassignTarget, setReassignTarget] = useState('Platos de Fondo');
+  const [reassignTarget, setReassignTarget] = useState('Almuerzos');
 
   const [newTagName, setNewTagName] = useState('');
   const [editingTag, setEditingTag] = useState(null);
@@ -71,7 +70,7 @@ export default function AdminProductsPage() {
   const categoryList = useMemo(() => {
     const serverCats = Array.isArray(catalogFilters?.categorias) ? catalogFilters.categorias : [];
     if (serverCats.length > 0) return serverCats;
-    return DEFAULT_CATEGORIES.map((nombre) => ({ nombre, count: 0 }));
+    return DEFAULT_CATEGORIES.filter((c) => c.id !== 'todos').map((c) => ({ nombre: c.name, count: 0 }));
   }, [catalogFilters]);
 
   const tagList = useMemo(() => {
@@ -275,7 +274,7 @@ export default function AdminProductsPage() {
   };
 
   return (
-    <div style={{ maxWidth: '1260px', margin: '0 auto', padding: '20px 18px 40px' }}>
+    <div style={{ width: '100%', maxWidth: '1260px', margin: '0 auto', padding: '20px 18px 40px', boxSizing: 'border-box' }}>
       {/* Cabecera */}
       <div style={{
         display: 'flex',
@@ -286,15 +285,9 @@ export default function AdminProductsPage() {
         marginBottom: '20px',
       }}>
         <div>
-          <span style={{ fontSize: '11.5px', fontWeight: 800, color: 'var(--c-terracotta)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-            Administración de Catálogo • MongoDB & Azure Blob Storage
-          </span>
-          <h1 style={{ fontSize: '26px', fontWeight: 800, color: '#14171F', margin: '2px 0 4px' }}>
+          <h1 style={{ fontSize: '26px', fontWeight: 800, color: '#14171F', margin: 0 }}>
             Carta, Filtros y Etiquetas
           </h1>
-          <p style={{ fontSize: '13.5px', color: '#64748B', margin: 0 }}>
-            Administra los platos que entran a la base de datos, sus URLs de imagen externas y sus categorías o etiquetas.
-          </p>
         </div>
 
         <button
@@ -394,9 +387,9 @@ export default function AdminProductsPage() {
               <Search size={15} color="#94A3B8" style={{ position: 'absolute', left: '11px' }} />
               <input
                 type="text"
+                aria-label="Buscar platos"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                placeholder="Buscar por nombre, descripción o etiqueta..."
                 style={{
                   width: '100%',
                   padding: '9px 12px 9px 34px',
@@ -592,22 +585,19 @@ export default function AdminProductsPage() {
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: '18px' }}>
           {/* Categorías */}
           <section style={{ background: '#FFFFFF', borderRadius: '18px', border: '1px solid #EADBCE', padding: '18px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '14px' }}>
               <FolderKanban size={18} color="var(--c-burgundy-800)" />
               <h2 style={{ fontSize: '17px', fontWeight: 800, color: '#14171F', margin: 0 }}>
                 Categorías (Filtros del Menú)
               </h2>
             </div>
-            <p style={{ fontSize: '12.5px', color: '#64748B', margin: '0 0 14px' }}>
-              Renombrar o eliminar una categoría actualiza automáticamente los platos asociados en MongoDB.
-            </p>
 
             <form onSubmit={handleCreateCategory} style={{ display: 'flex', gap: '8px', marginBottom: '14px' }}>
               <input
                 type="text"
+                aria-label="Nueva categoría"
                 value={newCategoryName}
                 onChange={(e) => setNewCategoryName(e.target.value)}
-                placeholder="Nueva categoría (ej: Desayunos)"
                 style={{ flex: 1, padding: '8px 12px', borderRadius: '10px', border: '1px solid #E2E8F0', fontSize: '13px' }}
               />
               <button type="submit" className="btn-primary" style={{ padding: '8px 14px', borderRadius: '10px', fontSize: '13px', fontWeight: 700 }}>
@@ -699,22 +689,19 @@ export default function AdminProductsPage() {
 
           {/* Etiquetas */}
           <section style={{ background: '#FFFFFF', borderRadius: '18px', border: '1px solid #EADBCE', padding: '18px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '14px' }}>
               <Tag size={18} color="var(--c-terracotta)" />
               <h2 style={{ fontSize: '17px', fontWeight: 800, color: '#14171F', margin: 0 }}>
                 Etiquetas de Platos
               </h2>
             </div>
-            <p style={{ fontSize: '12.5px', color: '#64748B', margin: '0 0 14px' }}>
-              Crea o edita etiquetas (ej: Vegetariano, Sin Gluten, Picante, Rápido) y sincronízalas con toda la carta.
-            </p>
 
             <form onSubmit={handleCreateTag} style={{ display: 'flex', gap: '8px', marginBottom: '14px' }}>
               <input
                 type="text"
+                aria-label="Nueva etiqueta"
                 value={newTagName}
                 onChange={(e) => setNewTagName(e.target.value)}
-                placeholder="Nueva etiqueta (ej: Vegano)"
                 style={{ flex: 1, padding: '8px 12px', borderRadius: '10px', border: '1px solid #E2E8F0', fontSize: '13px' }}
               />
               <button type="submit" className="btn-primary" style={{ padding: '8px 14px', borderRadius: '10px', fontSize: '13px', fontWeight: 700 }}>
@@ -796,8 +783,6 @@ export default function AdminProductsPage() {
           </section>
         </div>
       )}
-
-      <RoleLogsPanel roleLabel="Administrador — Productos y Filtros" />
 
       {/* Modal Crear / Editar Plato */}
       {showProductModal && (
@@ -896,9 +881,9 @@ export default function AdminProductsPage() {
                   <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, marginBottom: '4px' }}>Imagen (URL Azure Blob o archivo)</label>
                   <input
                     type="text"
+                    aria-label="Imagen del plato"
                     value={productForm.imagen}
                     onChange={(e) => setProductForm({ ...productForm, imagen: e.target.value })}
-                    placeholder="https://...blob.core.windows.net/menu/plato.jpg"
                     style={{ width: '100%', padding: '9px 12px', borderRadius: '10px', border: '1px solid #CBD5E1', fontSize: '13.5px' }}
                   />
                 </div>
@@ -944,6 +929,7 @@ export default function AdminProductsPage() {
                 <div style={{ display: 'flex', gap: '6px' }}>
                   <input
                     type="text"
+                    aria-label="Nueva etiqueta para el plato"
                     value={customTagInput}
                     onChange={(e) => setCustomTagInput(e.target.value)}
                     onKeyDown={(e) => {
@@ -952,7 +938,6 @@ export default function AdminProductsPage() {
                         handleAddCustomTagToForm();
                       }
                     }}
-                    placeholder="Agregar otra etiqueta..."
                     style={{ flex: 1, padding: '7px 10px', borderRadius: '9px', border: '1px solid #CBD5E1', fontSize: '12.5px' }}
                   />
                   <button

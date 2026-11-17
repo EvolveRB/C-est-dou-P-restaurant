@@ -70,20 +70,51 @@ export default function ClientCartPage({ onGoToMenu, onOrderSuccess }) {
   const tipAmount = Math.round((billableTotal * tipPercent) / 100);
   const finalPaymentTotal = billableTotal + tipAmount;
 
+  const isValidReceiptEmailDomain = (email) => {
+    const clean = (email || '').trim().toLowerCase();
+    const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailPattern.test(clean)) return false;
+    const domain = clean.split('@')[1] || '';
+    const knownProviders = new Set([
+      'gmail.com',
+      'googlemail.com',
+      'outlook.com',
+      'outlook.es',
+      'outlook.cl',
+      'hotmail.com',
+      'hotmail.es',
+      'hotmail.cl',
+      'live.com',
+      'live.cl',
+      'msn.com',
+      'yahoo.com',
+      'yahoo.es',
+      'icloud.com',
+      'me.com',
+      'mac.com',
+      'proton.me',
+      'protonmail.com',
+      'gmx.com',
+      'aol.com',
+    ]);
+    if (knownProviders.has(domain)) return true;
+    const validTlds = ['.com', '.cl', '.es', '.net', '.org', '.edu', '.edu.cl', '.gob.cl', '.gov', '.me', '.io'];
+    return validTlds.some((tld) => domain.endsWith(tld) && domain.length > tld.length + 1);
+  };
+
   const handleConfirmPayment = async (e) => {
     if (e && e.preventDefault) e.preventDefault();
     setPaymentError('');
     const trimmedEmail = customerEmail.trim().toLowerCase();
-    const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailPattern.test(trimmedEmail)) {
-      setPaymentError('Ingresa un correo electrónico válido para enviarte tu comprobante.');
+    if (trimmedEmail && !isValidReceiptEmailDomain(trimmedEmail)) {
+      setPaymentError('Ingresa un correo válido (ej. @gmail.com, @outlook.com, @hotmail.com, @yahoo.com o .cl) o déjalo vacío para pedir tu boleta presencial.');
       return;
     }
 
     setPaying(true);
     try {
       const receipt = await payAndCloseTable({
-        correoCliente: trimmedEmail,
+        correoCliente: trimmedEmail || '',
         metodoPago: paymentMethod,
         propinaPorcentaje: tipPercent,
       });
@@ -492,13 +523,13 @@ export default function ClientCartPage({ onGoToMenu, onOrderSuccess }) {
                   </div>
                 </div>
 
-                {/* Correo obligatorio para envío de comprobante al 100% de clientes */}
+                {/* Correo opcional para boleta electrónica (vacío = retiro presencial) */}
                 <div style={{ marginBottom: '18px' }}>
                   <label
                     htmlFor="client-receipt-email"
                     style={{ display: 'block', fontSize: '12px', fontWeight: 800, color: 'var(--c-text-main)', marginBottom: '6px' }}
                   >
-                    Correo para tu comprobante electrónico *
+                    Correo electrónico para boleta (opcional, deja vacío para pedirla presencialmente)
                   </label>
                   <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
                     <Mail
@@ -509,13 +540,11 @@ export default function ClientCartPage({ onGoToMenu, onOrderSuccess }) {
                     <input
                       id="client-receipt-email"
                       type="email"
-                      required
                       value={customerEmail}
                       onChange={(e) => {
                         setCustomerEmail(e.target.value);
                         if (paymentError) setPaymentError('');
                       }}
-                      placeholder="cliente@correo.com"
                       style={{
                         width: '100%',
                         padding: '11px 12px 11px 36px',
@@ -528,9 +557,6 @@ export default function ClientCartPage({ onGoToMenu, onOrderSuccess }) {
                       }}
                     />
                   </div>
-                  <p style={{ fontSize: '11px', color: 'var(--c-text-muted)', marginTop: '5px' }}>
-                    Enviamos el detalle de tu boleta al 100% de las visitas al confirmar el pago.
-                  </p>
                   {paymentError && (
                     <p style={{ fontSize: '12px', fontWeight: 700, color: '#DC2626', marginTop: '6px' }}>
                       {paymentError}
@@ -694,14 +720,22 @@ export default function ClientCartPage({ onGoToMenu, onOrderSuccess }) {
                   <div>
                     <strong>Comprobante:</strong> {receiptResult?.comprobante_codigo || 'Emitido'}
                   </div>
-                  <div>
-                    <strong>Correo:</strong> {receiptResult?.correo_cliente || customerEmail}
-                  </div>
-                  <div style={{ color: receiptResult?.comprobante_enviado ? '#15803D' : '#B45309', fontWeight: 700 }}>
-                    {receiptResult?.comprobante_enviado
-                      ? 'Comprobante enviado por correo electrónico.'
-                      : 'Comprobante emitido y respaldado en el sistema (pendiente de servidor SMTP).'}
-                  </div>
+                  {receiptResult?.correo_cliente || customerEmail ? (
+                    <>
+                      <div>
+                        <strong>Correo:</strong> {receiptResult?.correo_cliente || customerEmail}
+                      </div>
+                      <div style={{ color: receiptResult?.comprobante_enviado ? '#15803D' : '#B45309', fontWeight: 700 }}>
+                        {receiptResult?.comprobante_enviado
+                          ? 'Comprobante enviado por correo electrónico.'
+                          : 'Comprobante emitido y respaldado en el sistema (pendiente de servidor SMTP).'}
+                      </div>
+                    </>
+                  ) : (
+                    <div style={{ color: '#475569', fontWeight: 700 }}>
+                      Entrega de boleta: solicítala de forma presencial en caja o con el garzón.
+                    </div>
+                  )}
                 </div>
 
                 <button

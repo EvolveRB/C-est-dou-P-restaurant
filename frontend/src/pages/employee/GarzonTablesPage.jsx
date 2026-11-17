@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { useRestaurant } from '../../context/RestaurantContext';
 import CookOrderModal from '../../components/employee/CookOrderModal';
-import RoleLogsPanel from '../../components/employee/RoleLogsPanel';
 import { Utensils, BellRing } from 'lucide-react';
 
 export default function GarzonTablesPage() {
@@ -280,8 +279,6 @@ export default function GarzonTablesPage() {
             );
           })}
         </div>
-
-        <RoleLogsPanel roleLabel="Garzón" />
       </div>
 
       {/* Modal de Comanda al pulsar una mesa con pedido */}

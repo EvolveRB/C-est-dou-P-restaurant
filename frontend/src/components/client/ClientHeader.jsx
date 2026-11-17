@@ -35,7 +35,7 @@ export default function ClientHeader({ searchQuery, setSearchQuery }) {
           <Search size={16} color="var(--c-terracotta)" />
           <input
             type="text"
-            placeholder="Buscar por nombre o ingrediente..."
+            aria-label="Buscar platos"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             autoFocus

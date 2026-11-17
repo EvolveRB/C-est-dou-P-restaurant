@@ -16,6 +16,29 @@ SESSION_COOKIE_NAME = "cest_doux_session"
 SESSION_TTL_SECONDS = 12 * 60 * 60  # 12 horas
 
 
+def capitalize_person_name(raw_name: Optional[str]) -> str:
+    """Normaliza nombre o apellido dejando la primera letra de cada palabra en mayúscula."""
+    if not raw_name:
+        return ""
+    words = [w.strip() for w in str(raw_name).strip().split() if w.strip()]
+    return " ".join(w[0].upper() + w[1:].lower() for w in words)
+
+
+def compute_rut_dv(body_digits: str) -> str:
+    """Calcula el dígito verificador chileno (Módulo 11) para 8 dígitos."""
+    total = 0
+    multiplier = 2
+    for ch in reversed(body_digits):
+        total += int(ch) * multiplier
+        multiplier = 2 if multiplier == 7 else multiplier + 1
+    rem = 11 - (total % 11)
+    if rem == 11:
+        return "0"
+    if rem == 10:
+        return "K"
+    return str(rem)
+
+
 def normalize_rut(raw_rut: str) -> str:
     """Normaliza un RUT chileno al formato sin puntos y con guión: 12345678-K."""
     if not raw_rut:
@@ -27,9 +50,12 @@ def normalize_rut(raw_rut: str) -> str:
 
 
 def is_valid_rut_format(raw_rut: str) -> bool:
-    """Valida formato básico de RUT chileno (7-8 dígitos + guión + dígito o K)."""
+    """Valida RUT chileno de exactamente 9 dígitos (8 de cuerpo + 1 DV válido por Módulo 11)."""
     norm = normalize_rut(raw_rut)
-    return bool(re.match(r"^\d{7,8}-[0-9K]$", norm))
+    if not re.match(r"^\d{8}-[0-9K]$", norm):
+        return False
+    body, dv = norm.split("-", 1)
+    return compute_rut_dv(body) == dv
 
 
 def hash_password(plain_password: str) -> str:

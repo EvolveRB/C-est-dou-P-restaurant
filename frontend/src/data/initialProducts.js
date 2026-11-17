@@ -1,12 +1,13 @@
 export const DEFAULT_CATEGORIES = [
   { id: 'todos', name: 'Todos' },
+  { id: 'desayunos', name: 'Desayunos' },
   { id: 'entradas', name: 'Entradas' },
-  { id: 'sopas', name: 'Sopas' },
-  { id: 'platos de fondo', name: 'Platos de Fondo' },
-  { id: 'carnes', name: 'Carnes' },
-  { id: 'pastas', name: 'Pastas' },
+  { id: 'almuerzos', name: 'Almuerzos' },
   { id: 'postres', name: 'Postres' },
-  { id: 'bebidas', name: 'Bebidas' },
+  { id: 'bebestibles', name: 'Bebestibles' },
+  { id: 'alimentos para alergicos', name: 'Alimentos para Alérgicos' },
+  { id: 'cafe', name: 'Café' },
+  { id: 'combos', name: 'Combos' },
 ];
 
 export function normalizeCategoryKey(rawCategory) {
@@ -15,7 +16,7 @@ export function normalizeCategoryKey(rawCategory) {
     .toLowerCase()
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '');
-  if (!clean) return 'platos de fondo';
+  if (!clean) return 'almuerzos';
   if (clean === 'postre') return 'postres';
   return clean;
 }

@@ -3,7 +3,7 @@ import { useLocation } from 'react-router-dom';
 import { normalizeCategoryKey } from '../data/initialProducts';
 import { useAuth } from './AuthContext';
 import { roleLog } from '../utils/roleLogger';
-import { normalizeRut } from '../utils/rut';
+import { capitalizePersonName, normalizeRut } from '../utils/rut';
 
 const API_URL = import.meta.env.VITE_API_URL ?? (import.meta.env.DEV ? 'http://localhost:8000' : '');
 const AZURE_IMAGES_BASE_URL = (import.meta.env.VITE_AZURE_IMAGES_BASE_URL || '').trim().replace(/\/+$/, '');
@@ -208,6 +208,7 @@ export function RestaurantProvider({ children }) {
   const [loadingProducts, setLoadingProducts] = useState(false);
   const [loadingEmployees, setLoadingEmployees] = useState(false);
   const [loadingAdminPedidos, setLoadingAdminPedidos] = useState(false);
+  const [adminPedidosError, setAdminPedidosError] = useState('');
 
   const fetchRoleLogs = useCallback(async () => {
     if (!activeStaffRole) return;
@@ -257,9 +258,14 @@ export function RestaurantProvider({ children }) {
         const data = await res.json();
         if (data && typeof data === 'object') {
           setAdminPedidosData(data);
+          setAdminPedidosError('');
         }
+      } else {
+        const errBody = await res.json().catch(() => ({}));
+        setAdminPedidosError(errBody?.detail || `Error HTTP ${res.status} al cargar pedidos y transacciones.`);
       }
     } catch (err) {
+      setAdminPedidosError(err?.message || 'No se pudo conectar con el servidor.');
       roleLog('Administrador', 'warn', `Error cargando transacciones: ${err.message}`);
     } finally {
       setLoadingAdminPedidos(false);
@@ -452,8 +458,8 @@ export function RestaurantProvider({ children }) {
         credentials: 'include',
         body: JSON.stringify({
           rut: normalizeRut(newEmp.rut),
-          nombre: newEmp.nombre?.trim(),
-          apellido: newEmp.apellido?.trim() || '',
+          nombre: capitalizePersonName(newEmp.nombre),
+          apellido: capitalizePersonName(newEmp.apellido),
           correo: newEmp.correo?.trim() || null,
           telefono: newEmp.telefono?.trim() || null,
           rol: newEmp.rol || 'Garzón',
@@ -1012,6 +1018,7 @@ export function RestaurantProvider({ children }) {
         updateEmployeeRole,
         deleteEmployee,
         adminPedidosData,
+        adminPedidosError,
         loadingAdminPedidos,
         fetchAdminOrdersAndTransactions,
         resendTransactionReceipt,

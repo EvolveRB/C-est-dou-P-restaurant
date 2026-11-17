@@ -1,6 +1,7 @@
-import { NavLink, Link } from 'react-router-dom';
+import { NavLink } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
-import { Utensils, LogOut, User } from 'lucide-react';
+import { Utensils } from 'lucide-react';
+import UserProfileMenu from './UserProfileMenu';
 
 export default function GarzonNavbar() {
   const { user, logout } = useAuth();
@@ -25,37 +26,14 @@ export default function GarzonNavbar() {
           <Utensils size={16} />
           <span>Salón de Mesas</span>
         </NavLink>
-
-        <Link
-          to="/mesa/1"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="staff-nav-item"
-        >
-          <Utensils size={16} color="var(--c-terracotta)" />
-          <span>Ver Menú Cliente (Mesa 1)</span>
-        </Link>
       </nav>
 
-      <div className="staff-user-actions">
-        <div className="staff-user-pill">
-          <User size={15} color="#94A3B8" />
-          <span style={{ fontWeight: 600 }}>{user?.displayName || 'Garzón'}</span>
-          <span className="staff-user-role" style={{ backgroundColor: '#F1F5F9', color: '#475569' }}>
-            Garzón
-          </span>
-        </div>
-
-        <button
-          className="staff-logout-btn"
-          onClick={logout}
-          title="Cerrar sesión"
-        >
-          <LogOut size={15} />
-          <span>Salir</span>
-        </button>
-      </div>
+      <UserProfileMenu
+        displayName={user?.displayName || 'Garzón'}
+        roleLabel="Garzón"
+        roleStyle={{ backgroundColor: '#F1F5F9', color: '#475569' }}
+        onLogout={logout}
+      />
     </header>
   );
 }
-

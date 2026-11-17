@@ -54,8 +54,29 @@ SqliteSessionLocal = sessionmaker(
 
 
 def init_sqlite_db():
-    """Crea las tablas relacionales de usuarios, logs y configuración si no existen."""
+    """Crea las tablas relacionales de usuarios, logs y configuración y normaliza nombres."""
+    from models import Usuario
+    from security import capitalize_person_name
+
     Base.metadata.create_all(bind=sqlite_engine)
+    db = SqliteSessionLocal()
+    try:
+        updated = False
+        for u in db.query(Usuario).all():
+            cap_nombre = capitalize_person_name(u.nombre)
+            cap_apellido = capitalize_person_name(u.apellido)
+            if cap_nombre and cap_nombre != u.nombre:
+                u.nombre = cap_nombre
+                updated = True
+            if (u.apellido or "") != cap_apellido:
+                u.apellido = cap_apellido
+                updated = True
+        if updated:
+            db.commit()
+    except Exception:
+        db.rollback()
+    finally:
+        db.close()
 
 
 def get_sqlite_db():

@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ShieldCheck, KeyRound, LogOut } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
-import { formatRutDisplay, isValidRutFormat } from '../../utils/rut';
+import { formatRutDisplay, isValidRutFormat, capitalizePersonName } from '../../utils/rut';
 
 export default function StaffLoginForm() {
   const {
@@ -185,7 +185,7 @@ export default function StaffLoginForm() {
       setError('');
 
       if (!isValidRutFormat(rut)) {
-        setError('Ingresa un RUT válido (ej: 12.345.678-9).');
+        setError('RUT inválido. Debe tener exactamente 9 dígitos y dígito verificador válido.');
         return;
       }
       if (!setupNombre.trim()) {
@@ -203,8 +203,8 @@ export default function StaffLoginForm() {
 
       const res = await setupInitialAdmin({
         rut,
-        nombre: setupNombre,
-        apellido: setupApellido,
+        nombre: capitalizePersonName(setupNombre),
+        apellido: capitalizePersonName(setupApellido),
         correo: setupCorreo,
         password,
         confirmPassword: setupConfirmPassword,
@@ -253,7 +253,6 @@ export default function StaffLoginForm() {
                   id="setup-rut"
                   type="text"
                   className="login-input"
-                  placeholder="12.345.678-9"
                   value={rut}
                   onChange={(e) => setRut(formatRutDisplay(e.target.value))}
                   required
@@ -304,7 +303,6 @@ export default function StaffLoginForm() {
                   id="setup-correo"
                   type="email"
                   className="login-input"
-                  placeholder="admin@restaurante.cl"
                   value={setupCorreo}
                   onChange={(e) => setSetupCorreo(e.target.value)}
                 />
@@ -389,6 +387,10 @@ export default function StaffLoginForm() {
       setError('Por favor ingresa tu RUT.');
       return;
     }
+    if (!isValidRutFormat(rut)) {
+      setError('RUT inválido. Debe tener exactamente 9 dígitos y dígito verificador válido.');
+      return;
+    }
     if (!password) {
       setError('Por favor ingresa tu contraseña.');
       return;
@@ -430,7 +432,6 @@ export default function StaffLoginForm() {
                 id="staff-rut"
                 type="text"
                 className="login-input"
-                placeholder="12.345.678-9"
                 value={rut}
                 onChange={(e) => setRut(formatRutDisplay(e.target.value))}
                 autoComplete="username"

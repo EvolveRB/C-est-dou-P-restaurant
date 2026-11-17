@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { normalizeRut } from '../utils/rut';
+import { capitalizePersonName, normalizeRut } from '../utils/rut';
 import { roleLog } from '../utils/roleLogger';
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -91,8 +91,8 @@ export function AuthProvider({ children }) {
         credentials: 'include',
         body: JSON.stringify({
           rut: normalizeRut(rut),
-          nombre: nombre?.trim(),
-          apellido: apellido?.trim() || '',
+          nombre: capitalizePersonName(nombre),
+          apellido: capitalizePersonName(apellido),
           correo: correo?.trim() || null,
           telefono: telefono?.trim() || null,
           password,
@@ -270,10 +270,12 @@ export function useAuth() {
 function normalizeEmpleado(data) {
   const rawCargo = data?.cargo ?? data?.rol ?? data?.role ?? '';
   const role = mapCargoToRole(rawCargo);
+  const firstName = capitalizePersonName(data?.nombre);
+  const lastName = capitalizePersonName(data?.apellido);
   const displayName =
-    data?.nombre && data?.apellido
-      ? `${data.nombre} ${data.apellido}`.trim()
-      : data?.nombre ?? data?.displayName ?? 'Personal de Turno';
+    firstName && lastName
+      ? `${firstName} ${lastName}`.trim()
+      : firstName || capitalizePersonName(data?.displayName) || 'Personal de Turno';
 
   return {
     id: data?.id ?? data?._id,

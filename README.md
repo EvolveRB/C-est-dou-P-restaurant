@@ -6,23 +6,12 @@
 >
 > 1. **Sincronización en Tiempo Real a 3 Segundos (`3000 ms`):**
 >    - Se unificó el intervalo de polling a **3 segundos** (`POLLING_INTERVAL_MS = 3000`) en [`RestaurantContext.jsx`](frontend/src/context/RestaurantContext.jsx) para cocina, garzón, administrador y seguimiento de mesa del cliente, reduciendo carga innecesaria de peticiones manteniendo avisos por debajo de los 3 segundos.
-> 2. **Eliminación de Secretos del Repositorio e Historial Git (`database.py` y `.env`):**
->    - Se removió la URI de conexión con credenciales embebidas en [`backend/database.py`](backend/database.py); ahora la API exige `MONGO_URI` exclusivamente desde variables de entorno.
->    - Se retiraron `backend/.env`, `frontend/.env` y `__pycache__/*.pyc` del seguimiento y del historial completo de Git, añadiendo [`.gitignore`](.gitignore) y plantillas seguras [`backend/.env.example`](backend/.env.example) y [`frontend/.env.example`](frontend/.env.example).
-> 3. **Comprobante Electrónico por Correo al 100% de los Clientes:**
->    - Se implementó [`backend/email_service.py`](backend/email_service.py) y el endpoint transaccional [`POST /mesas/{num_mesa}/pagar`](backend/main.py) junto con el campo obligatorio de correo en [`ClientCartPage.jsx`](frontend/src/pages/client/ClientCartPage.jsx).
->    - Al confirmar el pago, el 100% de las visitas registra su transacción (`total_pagado`, propina, método de pago, código `CDP-...` y detalle de platos), emite y envía el comprobante HTML por SMTP (con respaldo en BD y reenvío manual si SMTP no está configurado) y libera la mesa automáticamente.
-> 4. **Migración de Fotografías a Azure Blob Storage:**
->    - Se eliminaron todas las fotografías locales de platos del repositorio (`backend/Imagenes/` y `frontend/public/*.jpg|jpeg|png`) para alojarlas en **Azure Blob Storage**.
->    - El backend (`AZURE_BLOB_BASE_URL`) y frontend (`VITE_AZURE_IMAGES_BASE_URL`) resuelven URLs externas con carga diferida (`loading="lazy"`, `decoding="async"`) y un placeholder limpio cuando un plato no tiene imagen configurada.
-> 5. **Desbloqueo de Mesa 2 y Eliminación de Datos/Botones de Prueba:**
->    - Se liberó la **Mesa 2** (antes bloqueada en `'Pendiente'` con pedido ficticio) y se eliminaron por completo los endpoints `/sistema/reiniciar-pruebas` y `/mesas/reiniciar-pruebas`, el botón `"Reiniciar Pruebas"` de [`EmployeeDashboardPage.jsx`](frontend/src/pages/employee/EmployeeDashboardPage.jsx) y los platos ficticios de respaldo en [`initialProducts.js`](frontend/src/data/initialProducts.js).
-> 6. **Nuevos Layouts para Administrador (Transacciones + Carta, Filtros y Etiquetas):**
->    - **Pedidos y Transacciones ([`AdminOrdersPage.jsx`](frontend/src/pages/employee/AdminOrdersPage.jsx)):** Diseñado con enfoque financiero prioritario en **transacciones y caja** (ingresos totales, propinas, ticket promedio, desglose por medio de pago, estado/reenvío de comprobantes 100% y filtro multi-sucursal para múltiples locales), manteniendo la **vista de mesas en vivo** y comandas clicables.
->    - **Carta, Filtros y Etiquetas ([`AdminProductsPage.jsx`](frontend/src/pages/employee/AdminProductsPage.jsx)):** Nuevo panel CRUD conectado a MongoDB para crear, editar, ocultar y eliminar platos (incluyendo URLs de imagen de Azure), además de administrar dinámicamente **categorías (filtros del menú)** y **etiquetas** con propagación en cascada hacia el catálogo de clientes.
-> 7. **Correcciones Adicionales Detectadas en Auditoría:**
->    - **Normalización de categorías y catálogo:** Se eliminó el límite artificial `precio < 10000` y el efecto secundario de escritura en `GET /productos/filtrados`, normalizando categorías entre MongoDB y el cliente (`"Platos de Fondo"`, `"Postres"`, etc.) mediante `/catalogo/filtros`.
->    - **Carga garantizada en Admin y Cocina:** Los administradores ahora cargan productos, categorías, etiquetas, mesas, transacciones y pedidos automáticamente al autenticarse.
+> 3. **Comprobante Electrónico Opcional por Correo o Retiro Presencial:**
+>    - Se implementó [`backend/email_service.py`](backend/email_service.py) y [`POST /mesas/{num_mesa}/pagar`](backend/main.py) junto con el campo opcional de correo en [`ClientCartPage.jsx`](frontend/src/pages/client/ClientCartPage.jsx).
+>    - Si el comensal ingresa un correo válido (ej. Gmail, Outlook, etc.), recibe su comprobante HTML por SMTP; si lo deja vacío, registra su transacción y solicita su boleta de forma presencial.
+> 4. **Nuevos Layouts para Administrador (Transacciones + Carta, Filtros y Etiquetas):**
+>    - **Pedidos y Transacciones ([`AdminOrdersPage.jsx`](frontend/src/pages/employee/AdminOrdersPage.jsx)):** Diseñado con enfoque financiero prioritario en **transacciones y caja** (ingresos totales, propinas, ticket promedio, desglose por medio de pago, estado/reenvío de comprobantes y filtro multi-sucursal para múltiples locales), manteniendo la **vista de mesas en vivo** y comandas clicables.
+>    - **Carta, Filtros y Etiquetas ([`AdminProductsPage.jsx`](frontend/src/pages/employee/AdminProductsPage.jsx)):** Panel CRUD conectado a MongoDB para administrar platos, URLs externas de imágenes y categorías/etiquetas con propagación hacia el catálogo de clientes.
 
 ---
 
